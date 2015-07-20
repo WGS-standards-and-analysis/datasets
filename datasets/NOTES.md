@@ -12,4 +12,6 @@ Metadata
 
 Accessions
 ----------
-* This section shows necessary accessions for acquiring genomes
+* This section shows necessary accessions for acquiring genomes.
+* Necessary fields: biosample_acc, strain, genbankAssembly, SRArun_acc, outbreak, dataSetName, suggestedReference, sha256sumAssembly, sha256sumRead1, sha256sumRead2
+
