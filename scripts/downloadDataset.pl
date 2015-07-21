@@ -154,11 +154,21 @@ sub downloadEverything{
       
     # Move the files according to how the download entry states.
     for(my $i=0;$i<$numFiles;$i++){
-      my($from,$to)=($$value{from}[$i],$$value{to}[$i]);
+      my($from,$to,$checksum)=($$value{from}[$i],$$value{to}[$i],$$value{checksum}[$i]);
 
       mkdir(dirname($to)) if(!-d dirname($to));
       system("mv -v $from $to") if(!$i_can_skip);
       die "ERROR moving $from to $to" if $?;
+
+      # See if the file downloaded.  Produce a warning if:
+      #   1) checksum is present AND
+      #   2) checksum is not the same as in the spreadsheet
+      my $calculatedChecksum=sha256sum($to);
+      if(!defined($checksum)){
+        logmsg "WARNING: checksum was not defined for $to";
+      } elsif ($calculatedChecksum ne $checksum){
+        logmsg "WARNING: the checksum for the file and the checksum listed in the spreadsheet don't match!\n  spreadsheet: $checksum\n  $to: $calculatedChecksum";
+      }
 
       # Perform any kind of post-processing after the file arrives.
       postProcess($to,$type,$value,$settings);
