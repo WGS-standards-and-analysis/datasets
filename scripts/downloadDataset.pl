@@ -11,7 +11,7 @@ use Getopt::Long;
 use Data::Dumper;
 use File::Basename qw/fileparse dirname basename/;
 use File::Temp qw/tempdir tmpfile/;
-use Bio::Perl;
+#use Bio::Perl;
 
 local $0=basename $0;
 sub logmsg{print STDERR "$0: @_\n";}
@@ -82,14 +82,14 @@ sub readTsv{
 
       # GenBank download command
       if($F{genbankassembly}){
-        $$d{$F{genbankassembly}}{download}="efetch -format gbwithparts -db nuccore -id $F{genbankassembly} > $tmpdir/$F{genbankassembly}.gbk";
+        $$d{$F{genbankassembly}}{download}="efetch -format gbwithparts -db nuccore -id $F{genbankassembly} > $tmpdir/$F{genbankassembly}.gbk && efetch -format fasta -db nuccore -id $F{genbankassembly} > $tmpdir/$F{genbankassembly}.fasta";
         $$d{$F{genbankassembly}}{name}=$F{strain} || die "ERROR: $F{genbankassembly} does not have a strain name!";
         $$d{$F{genbankassembly}}{type}="genbank";
         $$d{$F{genbankassembly}}{tempdir}=$tmpdir;
 
         # Files will be listed as from=>to, and they will have checksums
-        $$d{$F{genbankassembly}}{from}=["$tmpdir/$F{genbankassembly}.gbk"];
-        $$d{$F{genbankassembly}}{to}=["$$settings{outdir}/$F{strain}.gbk"];
+        $$d{$F{genbankassembly}}{from}=["$tmpdir/$F{genbankassembly}.gbk","$tmpdir/$F{genbankassembly}.fasta"];
+        $$d{$F{genbankassembly}}{to}=["$$settings{outdir}/$F{strain}.gbk","$$settings{outdir}/$F{strain}.fasta"];
         $$d{$F{genbankassembly}}{checksum}=[$F{sha256sumassembly}];
 
         $$d{$F{genbankassembly}}{$_} = $F{$_} for(qw(suggestedreference outbreak datasetname));
@@ -127,13 +127,19 @@ sub downloadEverything{
 
     # Get some local variables to make it more readable downstream
     my($type,$name,$download,$tempdir)=($$value{type},$$value{name},$$value{download},$$value{tempdir});
+    logmsg "DEBUG"; next if(!defined($type) || $type ne 'genbank');
 
     # Skip this download if the target files exist
     my $numFiles=scalar(@{$$value{from}});
     my $i_can_skip=1; # true until proven false
     for(my $i=0;$i<$numFiles;$i++){
-      #logmsg join("\t",$$value{to}[$i],sha256sum($$value{to}[$i]),$$value{checksum}[$i]);
-      $i_can_skip=0 if(!-e $$value{to}[$i] || sha256sum($$value{to}[$i]) ne $$value{checksum}[$i]);
+      my $to=$$value{to}[$i];
+      my $checksum=$$value{checksum}[$i];
+
+      # I cannot skip this download if:
+      #   1) The file doesn't exist yet OR
+      #   2) The checksum doesn't match
+      $i_can_skip=0 if(!-e $to || (defined($checksum) && sha256sum($to) ne $checksum));
     }
     if($i_can_skip){
       logmsg "I found the files for $name/$type and so I can skip this download";
@@ -182,8 +188,8 @@ sub postProcess{
 
   ## GenBank file post processing
   elsif($type eq 'genbank'){
-    my $fasta=dirname($file)."/".basename($file,qw(.gbk .gb)).".fasta";
-    genbankToFasta($file,$fasta,$settings) if(!-e $fasta);
+    #my $fasta=dirname($file)."/".basename($file,qw(.gbk .gb)).".fasta";
+    #genbankToFasta($file,$fasta,$settings) if(!-e $fasta);
   }
 }
 
@@ -194,6 +200,7 @@ sub postProcess{
 # Convert a genbank to a fasta file
 sub genbankToFasta{
   my($genbank,$fasta,$settings)=@_;
+  die "Deprecated";
   logmsg "Also generating $fasta.tmp";
   my $in=Bio::SeqIO->new(-file=>$genbank,-verbose=>-1);
   my $out=Bio::SeqIO->new(-file=>">$fasta.tmp",-format=>"fasta");
@@ -245,6 +252,7 @@ sub usage{
   "Reads a standard dataset spreadsheet and downloads its data
   Usage: $0 -o outdir spreadsheet.dataset.tsv
   PARAM        DEFAULT  DESCRIPTION
+  --outdir     <req'd>  The output directory
   --format     tsv      The input format. Default: tsv. No other format
                         is accepted at this time.
   --layout     onedir   onedir   - everything goes into one directory
