@@ -127,7 +127,7 @@ sub downloadEverything{
 
     # Get some local variables to make it more readable downstream
     my($type,$name,$download,$tempdir)=($$value{type},$$value{name},$$value{download},$$value{tempdir});
-    logmsg "DEBUG"; next if(!defined($type) || $type ne 'genbank');
+    #logmsg "DEBUG"; next if(!defined($type) || $type ne 'genbank');
 
     # Skip this download if the target files exist
     my $numFiles=scalar(@{$$value{from}});
@@ -144,7 +144,6 @@ sub downloadEverything{
     if($i_can_skip){
       logmsg "I found the files for $name/$type and so I can skip this download";
     }
-    #else { die join(" ",@{$$value{to}}); }  ## DEBUG
 
     # Perform the download unless given permission to skip it
     if(!$i_can_skip){
