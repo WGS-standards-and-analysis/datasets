@@ -76,6 +76,8 @@ sub readTsv{
         $$d{$F{srarun_acc}}{checksum}=[$F{sha256sumread1},$F{sha256sumread2}];
         if($$settings{layout} eq 'byrun'){
           $$d{$F{srarun_acc}}{to}=["$$settings{outdir}/$F{strain}/$F{strain}_1.fastq.gz","$$settings{outdir}/$F{strain}/$F{strain}_2.fastq.gz"];
+        }elsif($$settings{layout} eq 'byformat'){
+          $$d{$F{srarun_acc}}{to}=["$$settings{outdir}/reads/$F{strain}_1.fastq.gz","$$settings{outdir}/reads/$F{strain}_2.fastq.gz"];
         }
       }
 
@@ -94,6 +96,8 @@ sub readTsv{
         $$d{$F{genbankassembly}}{$_} = $F{$_} for(qw(suggestedreference outbreak datasetname));
         if($$settings{layout} eq 'byrun'){
           $$d{$F{genbankassembly}}{to}=["$$settings{outdir}/$F{strain}.gbk","$$settings{outdir}/$F{strain}.fasta"];
+        }elsif($$settings{layout} eq 'byformat'){
+          $$d{$F{genbankassembly}}{to}=["$$settings{outdir}/genbank/$F{strain}.gbk","$$settings{outdir}/genbank/$F{strain}.fasta"];
         }
       }
 
