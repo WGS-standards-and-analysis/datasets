@@ -10,8 +10,7 @@ use warnings;
 use Getopt::Long;
 use Data::Dumper;
 use File::Basename qw/fileparse dirname basename/;
-use File::Temp qw/tempdir tmpfile/;
-#use Bio::Perl;
+use File::Temp qw/tempdir tempfile/;
 
 local $0=basename $0;
 sub logmsg{print STDERR "$0: @_\n";}
@@ -90,11 +89,11 @@ sub readTsv{
         # Files will be listed as from=>to, and they will have checksums
         $$d{$F{genbankassembly}}{from}=["$tmpdir/$F{genbankassembly}.gbk","$tmpdir/$F{genbankassembly}.fasta"];
         $$d{$F{genbankassembly}}{to}=["$$settings{outdir}/$F{strain}.gbk","$$settings{outdir}/$F{strain}.fasta"];
-        $$d{$F{genbankassembly}}{checksum}=[$F{sha256sumassembly}];
+        $$d{$F{genbankassembly}}{checksum}=[$F{sha256sumassembly},"-"];
 
         $$d{$F{genbankassembly}}{$_} = $F{$_} for(qw(suggestedreference outbreak datasetname));
         if($$settings{layout} eq 'byrun'){
-          $$d{$F{genbankassembly}}{to}=["$$settings{outdir}/$F{strain}.gbk"];
+          $$d{$F{genbankassembly}}{to}=["$$settings{outdir}/$F{strain}.gbk","$$settings{outdir}/$F{strain}.fasta"];
         }
       }
 
@@ -156,6 +155,7 @@ sub downloadEverything{
     for(my $i=0;$i<$numFiles;$i++){
       my($from,$to,$checksum)=($$value{from}[$i],$$value{to}[$i],$$value{checksum}[$i]);
 
+      logmsg "$from  $to  $checksum";
       mkdir(dirname($to)) if(!-d dirname($to));
       system("mv -v $from $to") if(!$i_can_skip);
       die "ERROR moving $from to $to" if $?;
@@ -164,16 +164,19 @@ sub downloadEverything{
       #   1) checksum is present AND
       #   2) checksum is not the same as in the spreadsheet
       my $calculatedChecksum=sha256sum($to);
-      if(!defined($checksum)){
+      # Checksum is not present if the cell is blank, has a dash, or has N/A or NA
+      if(!defined($checksum) || $checksum=~/^\-+|NA|N\/A$/i){
         logmsg "WARNING: checksum was not defined for $to";
       } elsif ($calculatedChecksum ne $checksum){
         logmsg "WARNING: the checksum for the file and the checksum listed in the spreadsheet don't match!\n  spreadsheet: $checksum\n  $to: $calculatedChecksum";
       }
 
       # Perform any kind of post-processing after the file arrives.
-      postProcess($to,$type,$value,$settings);
+      postProcessFile($to,$type,$value,$settings);
     }
 
+    # Post-process whatever is requested on a set of files
+    postProcessFileSet($value,$settings);
   }
 
   # I can't think of any useful return value at this time.
@@ -182,7 +185,7 @@ sub downloadEverything{
 
 # Perform any kind of post processing after a file has landed
 # in the destination directory.
-sub postProcess{
+sub postProcessFile{
   my($file,$type,$fileInfo,$settings)=@_;
   ## Any kind of special processing, after the download.
 
@@ -190,7 +193,7 @@ sub postProcess{
   if($type eq 'sra'){
     # Create fasta files if requested
     if($$settings{fasta}){
-      my $fasta=dirname($file)."/".basename($file,qw(.fastq.gz .fastq)).".fasta";
+      my $fasta=dirname($file)."/".basename($file,qw(.fastq.gz)).".fasta";
       fastqToFasta($file,$fasta,$settings) if(!-e $fasta);
     }
   }
@@ -199,6 +202,24 @@ sub postProcess{
   elsif($type eq 'genbank'){
     #my $fasta=dirname($file)."/".basename($file,qw(.gbk .gb)).".fasta";
     #genbankToFasta($file,$fasta,$settings) if(!-e $fasta);
+  }
+}
+
+sub postProcessFileSet{
+  my($fileInfo,$settings)=@_;
+  ## SRA files
+  #    1. shuffle reads
+  if($$fileInfo{type} eq 'sra'){
+    my $shuffled=dirname($$fileInfo{to}[0])."/".basename($$fileInfo{to}[0],qw(_1.fastq.gz)).".shuffled.fastq.gz";
+    # Shuffle the reads if the user wants it and if the shuffled file isn't already there
+    if($$settings{shuffled} && !-e $shuffled){
+      shuffleFastqGz($$fileInfo{to}[0],$$fileInfo{to}[1],$shuffled,$settings);
+    }
+  } 
+  ## Genbank files
+  #    Nothing to do right now that can't be done under postProcessFile()
+  elsif($$fileInfo{type} eq 'genbank'){
+    
   }
 }
 
@@ -246,6 +267,34 @@ sub fastqToFasta{
 
   mkdir(dirname($fasta)) if(!-d dirname($fasta));
   system("mv -v $fasta.tmp $fasta"); die if $?;
+}
+
+# Shuffle two fastq.gz files
+sub shuffleFastqGz{
+  my($file1,$file2,$shuffled,$settings)=@_;
+  my ($tmpFh,$tmpfile)=tempfile("XXXXXX",TMPDIR=>1,CLEANUP=>1,SUFFIX=>".fastq");
+  logmsg "Shuffling $file1 and $file2 into $tmpfile, and then moving to $shuffled";
+  open(R1,"gunzip -c $file1 | ") or die "ERROR: could not open $file1 for reading: $!";
+  open(R2,"gunzip -c $file2 | ") or die "ERROR: could not open $file2 for reading: $!";
+  while(my $line=<R1>){
+    # Print read 1
+    print $tmpFh $line;
+    for(1..3){
+      $line=<R1>;
+      print $tmpFh $line;
+    }
+    # Print read 2
+    for(1..4){
+      $line=<R2>;
+      print $tmpFh $line;
+    }
+  }
+  close R1; close R2;
+  close $tmpFh; # close it only after being totally done with it
+  
+  # Gzip into the correct file and then remove the tmpfile
+  system("gzip -v $tmpfile && mv -v $tmpfile.gz $shuffled");
+  die "ERROR: could not gzip $tmpfile into $shuffled" if $?;
 }
 
 sub sha256sum{
