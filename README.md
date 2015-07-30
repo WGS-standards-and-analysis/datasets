@@ -28,7 +28,7 @@ To create your own dataset and to make it compatible with the existing script(s)
   5. source. Where did this dataset come from?
 3. Blank row - separates the two parts of the dataset
 4. Header row with these names (case-insensitive): biosample_acc, strain, genbankAssembly, SRArun_acc, outbreak, dataSetName, suggestedReference, sha256sumAssembly, sha256sumRead1, sha256sumRead2
-4. Accessions to the genomes for download.  Each row represents a genome and must have the following fields.
+4. Accessions to the genomes for download.  Each row represents a genome and must have the following fields.  Use a dash (-) for any missing data.
   1. biosample_acc - The BioSample accession
   2. strain - Its genome name
   3. genbankAssembly - GenBank accession number
