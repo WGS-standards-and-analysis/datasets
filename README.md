@@ -1,5 +1,5 @@
 # datasets
-Benchmark datasets for WGS analysis.  See datasets/NOTES.md for more details.
+Benchmark datasets for WGS analysis.
 
 ## Downloading a dataset
 To run, you need a dataset in tsv format.  Here is the usage statement:
