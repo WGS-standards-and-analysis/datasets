@@ -12,6 +12,7 @@ use Data::Dumper;
 use File::Basename qw/fileparse dirname basename/;
 use File::Temp qw/tempdir tempfile/;
 
+my $scriptInvocation="$0 ".join(" ",@ARGV);
 local $0=basename $0;
 sub logmsg{print STDERR "$0: @_\n";}
 
@@ -110,11 +111,44 @@ sub readTsv{
     else {
       my ($key,$value)=split /\t/;
       $key=lc($key);
+      $value||="";            # in case of blank values
+      $value=~s/^\s+|\s+$//g; # trim whitespace
+      $value=~s/\s+/_/g;      # turn whitespace into underscores
       $$d{$key}=$value;
     }
 
   }
   close TSV;
+
+  ## Any other misc thing to download
+  # Start-up variables
+  my $miscTempdir=tempdir("$0XXXXXX",TMPDIR=>1,CLEANUP=>1);
+  my $miscBasename=join("__",$$d{organism},$$d{outbreak});
+  my $miscPrefix="$miscTempdir/$miscBasename";
+
+  # Tree: currently it is set up like $$d{tree}="http://"
+  my $treeUrl=$$d{tree};
+  delete($$d{tree});
+  $$d{tree}={
+    download=>"wget -O $miscPrefix.dnd '$treeUrl'",
+    type=>"tree",
+    checksum=>["-"],
+    from=>["$miscPrefix.dnd"],
+    to=>["$$settings{outdir}/$miscBasename.dnd"],
+    tempdir=>$miscTempdir,
+    name=>"tree",
+  };
+
+  # Also load up the dataset information
+  $$d{information}={
+    download=>"echo -e \"downloadedWith\t$scriptInvocation\" > $miscPrefix.dataset.tsv && cat $tsv >> $miscPrefix.dataset.tsv",
+    type=>"spreadsheet",
+    checksum=>["-"],
+    from=>["$miscPrefix.dataset.tsv"],
+    to=>["$$settings{outdir}/$miscBasename.dataset.tsv"],
+    tempdir=>$miscTempdir,
+    name=>"spreadsheet",
+  };
 
   return $d;
 }
@@ -130,7 +164,7 @@ sub downloadEverything{
 
     # Get some local variables to make it more readable downstream
     my($type,$name,$download,$tempdir)=($$value{type},$$value{name},$$value{download},$$value{tempdir});
-    #logmsg "DEBUG"; next if(!defined($type) || $type ne 'genbank');
+    #logmsg "DEBUG"; next if(!defined($type) || $type eq 'genbank' || $type eq 'sra');
 
     # Skip this download if the target files exist
     my $numFiles=scalar(@{$$value{from}});
@@ -311,7 +345,10 @@ sub sha256sum{
 }
 
 sub usage{
-  "Reads a standard dataset spreadsheet and downloads its data
+  "  $0: Reads a standard dataset spreadsheet and downloads its data
+  Brought to you by the WGS Standards and Analysis working group
+  https://github.com/WGS-standards-and-analysis/datasets
+
   Usage: $0 -o outdir spreadsheet.dataset.tsv
   PARAM        DEFAULT  DESCRIPTION
   --outdir     <req'd>  The output directory
