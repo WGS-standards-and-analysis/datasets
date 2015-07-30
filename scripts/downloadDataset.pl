@@ -183,6 +183,7 @@ sub downloadEverything{
     }
 
     # Perform the download unless given permission to skip it
+    #logmsg "DEBUG"; $i_can_skip=1;
     if(!$i_can_skip){
       logmsg "Downloading $name/$type to $tempdir";
       system($download);
@@ -193,10 +194,12 @@ sub downloadEverything{
     for(my $i=0;$i<$numFiles;$i++){
       my($from,$to,$checksum)=($$value{from}[$i],$$value{to}[$i],$$value{checksum}[$i]);
 
-      logmsg "$from  $to  $checksum";
-      mkdir(dirname($to)) if(!-d dirname($to));
-      system("mv -v $from $to") if(!$i_can_skip);
-      die "ERROR moving $from to $to" if $?;
+      if(!$i_can_skip){
+        logmsg "$from => $to  ($checksum)";
+        mkdir(dirname($to)) if(!-d dirname($to));
+        system("mv -v $from $to") if(!$i_can_skip);
+        die "ERROR moving $from to $to" if $?;
+      }
 
       # See if the file downloaded.  Produce a warning if:
       #   1) checksum is present AND
