@@ -84,7 +84,7 @@ sub readTsv{
 
       # GenBank download command
       if($F{genbankassembly}){
-        $$d{$F{genbankassembly}}{download}="efetch -format gbwithparts -db nuccore -id $F{genbankassembly} > $tmpdir/$F{genbankassembly}.gbk && efetch -format fasta -db nuccore -id $F{genbankassembly} > $tmpdir/$F{genbankassembly}.fasta";
+        $$d{$F{genbankassembly}}{download}="esearch -db nuccore -query $F{genbankassembly} | efetch -format gbwithparts > $tmpdir/$F{genbankassembly}.gbk && esearch -db nuccore -query $F{genbankassembly} | efetch -format fasta > $tmpdir/$F{genbankassembly}.fasta";
         $$d{$F{genbankassembly}}{name}=$F{strain} || die "ERROR: $F{genbankassembly} does not have a strain name!";
         $$d{$F{genbankassembly}}{type}="genbank";
         $$d{$F{genbankassembly}}{tempdir}=$tmpdir;
@@ -159,12 +159,15 @@ sub downloadEverything{
   # Read each entry one at a time.  Each entry is a hash
   # consisting of: type, name, download, tempdir.
   while(my($key,$value)=each(%$d)){
-    # Only download entries which are hash values
+    # Skip blank values
+    next if($key eq "" || $key=~/^(\-|NA|N\/A)$/);
+
+    # Only download entries which are hash values and which have a download command
     next if(ref($value) ne "HASH" || !defined($$value{download}));
 
     # Get some local variables to make it more readable downstream
     my($type,$name,$download,$tempdir)=($$value{type},$$value{name},$$value{download},$$value{tempdir});
-    #logmsg "DEBUG"; next if(!defined($type) || $type eq 'genbank' || $type eq 'sra');
+    #logmsg "DEBUG"; next if(!defined($type) || $type ne 'genbank');
 
     # Skip this download if the target files exist
     my $numFiles=scalar(@{$$value{from}});
