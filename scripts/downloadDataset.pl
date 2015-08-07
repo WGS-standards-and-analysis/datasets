@@ -20,12 +20,14 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help outdir=s format=s shuffled! fasta! layout=s));
+  GetOptions($settings,qw(help outdir=s format=s shuffled! fasta! layout=s only=s));
   die usage() if($$settings{help});
   $$settings{format}||="tsv"; # by default, input format is tsv
   $$settings{seqIdTemplate}||='@$ac_$sn[_$rn]/$ri';
   $$settings{layout}||="onedir";
   $$settings{layout}=lc($$settings{layout});
+  $$settings{only}||="";
+  $$settings{only}=lc($$settings{only});
 
   # Get the output directory and spreadsheet, and make sure they exist
   $$settings{outdir}||=die "ERROR: need outdir parameter\n".usage();
@@ -63,6 +65,11 @@ sub readTsv{
       # Get an index of each column
       my %F;
       @F{@header}=split(/\t/,$_);
+      # trim whitespace on fields
+      for(values(%F)){
+        next if(!$_);
+        $_=~s/^\s+|\s+$//g;
+      }
 
       # SRA download command
       if($F{srarun_acc}){
@@ -167,14 +174,18 @@ sub downloadEverything{
 
     # Get some local variables to make it more readable downstream
     my($type,$name,$download,$tempdir)=($$value{type},$$value{name},$$value{download},$$value{tempdir});
-    #logmsg "DEBUG"; next if(!defined($type) || $type ne 'genbank');
+    #logmsg "DEBUG"; next if(!defined($type) || $type ne 'tree');
+    if($$settings{only}){
+      next if(!defined($type));
+      next if($type ne $$settings{only});
+    }
 
     # Skip this download if the target files exist
     my $numFiles=scalar(@{$$value{from}});
     my $i_can_skip=1; # true until proven false
     for(my $i=0;$i<$numFiles;$i++){
       my $to=$$value{to}[$i];
-      my $checksum=$$value{checksum}[$i];
+      my $checksum=$$value{checksum}[$i] || "";
 
       # I cannot skip this download if:
       #   1) The file doesn't exist yet OR
@@ -196,6 +207,7 @@ sub downloadEverything{
     # Move the files according to how the download entry states.
     for(my $i=0;$i<$numFiles;$i++){
       my($from,$to,$checksum)=($$value{from}[$i],$$value{to}[$i],$$value{checksum}[$i]);
+      $checksum||="";
 
       if(!$i_can_skip){
         logmsg "$from => $to  ($checksum)";
@@ -366,6 +378,8 @@ sub usage{
   --shuffled   <NONE>   Output the reads as interleaved instead of individual
                         forward and reverse files.
   --fasta      <NONE>   Convert all fastq.gz files to fasta
+  --only       <NONE>   Only download this type of data.  Good for debugging.
+                        Possible values: tree, genbank, sra
   "
 }
 
