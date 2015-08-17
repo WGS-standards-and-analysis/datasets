@@ -16,6 +16,11 @@ To run, you need a dataset in tsv format.  Here is the usage statement:
                             forward and reverse files.
       --fasta      <NONE>   Convert all fastq.gz files to fasta
 
+## Dependencies
+1. edirect
+2. sra-toolkit, built from source: https://github.com/ncbi/sra-tools/wiki/Building-and-Installing-from-Source
+3. Perl 5.12
+
 ## Creating your own dataset
 To create your own dataset and to make it compatible with the existing script(s) here, please follow these instructions.  These instructions are subject to change.
 
