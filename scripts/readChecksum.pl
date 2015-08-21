@@ -2,8 +2,8 @@
 
 use strict;
 use warnings;
-use Getopt::Long;
-use File::Temp;
+use Getopt::Long qw/GetOptions/;
+use File::Temp ();
 use File::Basename qw/fileparse basename/;
 
 local $0=basename $0;
