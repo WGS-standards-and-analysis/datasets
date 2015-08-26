@@ -1,10 +1,16 @@
 #!/bin/bash
 
 function logmsg(){
-  print $1 >&2
+  echo -e "$1" >&2
 }
 
 READS=$1
+
+if [ "$READS" == "" ]; then
+  logmsg "Gets a checksum from a fastq.gz or a fastq file";
+  logmsg "Usage: $0 file.fastq.gz";
+  exit 1;
+fi;
 
 IS_GZIP=$(file $READS| grep gzip)
 
