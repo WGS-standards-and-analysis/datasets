@@ -20,7 +20,7 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help outdir=s format=s shuffled! fasta! layout=s only=s));
+  GetOptions($settings,qw(help outdir=s format=s shuffled! fasta! layout=s only=s verbose!));
   die usage() if($$settings{help});
   $$settings{format}||="tsv"; # by default, input format is tsv
   $$settings{seqIdTemplate}||='@$ac_$sn[_$rn]/$ri';
@@ -91,7 +91,8 @@ sub readTsv{
 
       # GenBank download command
       if($F{genbankassembly}){
-        $$d{$F{genbankassembly}}{download}="esearch -db nuccore -query $F{genbankassembly} | efetch -format gbwithparts > $tmpdir/$F{genbankassembly}.gbk && esearch -db nuccore -query $F{genbankassembly} | efetch -format fasta > $tmpdir/$F{genbankassembly}.fasta";
+        #$$d{$F{genbankassembly}}{download}="esearch -db nuccore -query $F{genbankassembly} | efetch -format gbwithparts > $tmpdir/$F{genbankassembly}.gbk && esearch -db nuccore -query $F{genbankassembly} | efetch -format fasta > $tmpdir/$F{genbankassembly}.fasta";
+        $$d{$F{genbankassembly}}{download}="esearch -db assembly -query $F{genbankassembly} | elink -related -target nuccore | efetch -format gbwithparts > $tmpdir/$F{genbankassembly}.gbk && esearch -db assembly -query $F{genbankassembly} | elink -related -target nuccore | efetch -format fasta > $tmpdir/$F{genbankassembly}.fasta";
         $$d{$F{genbankassembly}}{name}=$F{strain} || die "ERROR: $F{genbankassembly} does not have a strain name!";
         $$d{$F{genbankassembly}}{type}="genbank";
         $$d{$F{genbankassembly}}{tempdir}=$tmpdir;
@@ -200,6 +201,7 @@ sub downloadEverything{
     #logmsg "DEBUG"; $i_can_skip=1;
     if(!$i_can_skip){
       logmsg "Downloading $name/$type to $tempdir";
+      logmsg "    $download" if($$settings{verbose});
       system($download);
       die "ERROR downloading with command\n  $download" if $?;
     }
@@ -380,6 +382,7 @@ sub usage{
   --fasta      <NONE>   Convert all fastq.gz files to fasta
   --only       <NONE>   Only download this type of data.  Good for debugging.
                         Possible values: tree, genbank, sra
+  --verbose    <NODE>   Output more text.  Good for debugging.
   "
 }
 
