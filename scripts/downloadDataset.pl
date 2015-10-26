@@ -20,7 +20,7 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help outdir=s format=s shuffled! fasta! layout=s only=s));
+  GetOptions($settings,qw(help outdir=s format=s shuffled! fasta! layout=s only=s verbose!));
   die usage() if($$settings{help});
   $$settings{format}||="tsv"; # by default, input format is tsv
   $$settings{seqIdTemplate}||='@$ac_$sn[_$rn]/$ri';
@@ -62,14 +62,16 @@ sub readTsv{
     # Read biosample rows
     if($have_reached_biosample){
       my $tmpdir=tempdir("$0XXXXXX",TMPDIR=>1,CLEANUP=>1);
+
+      my @F=split(/\t/,$_);
+      for(@F){
+        next if(!$_);
+        s/^['"]+|['"]+//g;  # trim quotes
+        s/^\s+|\s+$//g;     # trim whitespace
+      }
       # Get an index of each column
       my %F;
-      @F{@header}=split(/\t/,$_);
-      # trim whitespace on fields
-      for(values(%F)){
-        next if(!$_);
-        $_=~s/^\s+|\s+$//g;
-      }
+      @F{@header}=@F;
 
       # SRA download command
       if($F{srarun_acc}){
@@ -91,7 +93,10 @@ sub readTsv{
 
       # GenBank download command
       if($F{genbankassembly}){
-        $$d{$F{genbankassembly}}{download}="esearch -db nuccore -query $F{genbankassembly} | efetch -format gbwithparts > $tmpdir/$F{genbankassembly}.gbk && esearch -db nuccore -query $F{genbankassembly} | efetch -format fasta > $tmpdir/$F{genbankassembly}.fasta";
+        $$d{$F{genbankassembly}}{download} ="esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -related -target nuccore > $tmpdir/edirect.xml && ";
+        $$d{$F{genbankassembly}}{download}.="cat $tmpdir/edirect.xml | efetch -format gbwithparts > $tmpdir/$F{genbankassembly}.gbk && ";
+        $$d{$F{genbankassembly}}{download}.="cat $tmpdir/edirect.xml | efetch -format fasta       > $tmpdir/$F{genbankassembly}.fasta";
+
         $$d{$F{genbankassembly}}{name}=$F{strain} || die "ERROR: $F{genbankassembly} does not have a strain name!";
         $$d{$F{genbankassembly}}{type}="genbank";
         $$d{$F{genbankassembly}}{tempdir}=$tmpdir;
@@ -200,6 +205,7 @@ sub downloadEverything{
     #logmsg "DEBUG"; $i_can_skip=1;
     if(!$i_can_skip){
       logmsg "Downloading $name/$type to $tempdir";
+      logmsg "    $download" if($$settings{verbose});
       system($download);
       die "ERROR downloading with command\n  $download" if $?;
     }
@@ -380,6 +386,7 @@ sub usage{
   --fasta      <NONE>   Convert all fastq.gz files to fasta
   --only       <NONE>   Only download this type of data.  Good for debugging.
                         Possible values: tree, genbank, sra
+  --verbose    <NODE>   Output more text.  Good for debugging.
   "
 }
 
