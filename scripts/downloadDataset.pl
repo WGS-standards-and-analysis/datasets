@@ -62,14 +62,16 @@ sub readTsv{
     # Read biosample rows
     if($have_reached_biosample){
       my $tmpdir=tempdir("$0XXXXXX",TMPDIR=>1,CLEANUP=>1);
+
+      my @F=split(/\t/,$_);
+      for(@F){
+        next if(!$_);
+        s/^['"]+|['"]+//g;  # trim quotes
+        s/^\s+|\s+$//g;     # trim whitespace
+      }
       # Get an index of each column
       my %F;
-      @F{@header}=split(/\t/,$_);
-      # trim whitespace on fields
-      for(values(%F)){
-        next if(!$_);
-        $_=~s/^\s+|\s+$//g;
-      }
+      @F{@header}=@F;
 
       # SRA download command
       if($F{srarun_acc}){
