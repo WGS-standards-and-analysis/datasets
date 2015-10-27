@@ -22,14 +22,12 @@ exit main();
 
 sub main{
   my $settings={run=>1};
-  GetOptions($settings,qw(help outdir=s format=s shuffled! fasta! layout=s only=s verbose! numcpus=i run!));
+  GetOptions($settings,qw(help outdir=s format=s shuffled! layout=s numcpus=i run!));
   die usage() if($$settings{help});
   $$settings{format}||="tsv"; # by default, input format is tsv
   $$settings{seqIdTemplate}||='@$ac_$sn[_$rn]/$ri';
   $$settings{layout}||="onedir";
   $$settings{layout}=lc($$settings{layout});
-  $$settings{only}||="";
-  $$settings{only}=lc($$settings{only});
   $$settings{numcpus}||=1;
 
   # Get the output directory and spreadsheet, and make sure they exist
@@ -105,9 +103,12 @@ sub tsvToMakeHash{
           # The defaults are set up for onedir, so change nothing if the layout is onedir
         } elsif($$settings{layout} eq 'byrun'){
           $dumpdir=$F{strain};
-          
         } elsif($$settings{layout} eq 'byformat'){
           $dumpdir="reads";
+        } elsif($$settings{layout} eq 'cfsan'){
+          $dumpdir="samples/$F{strain}";
+        } else{
+          die "ERROR: I do not understand layout $$settings{layout}";
         }
 
         # Change the directory for these filenames if they aren't being
@@ -171,9 +172,12 @@ sub tsvToMakeHash{
           # The defaults are set up for onedir, so change nothing if the layout is onedir
         } elsif($$settings{layout} eq 'byrun'){
           $dumpdir=$F{strain};
-          
         } elsif($$settings{layout} eq 'byformat'){
           $dumpdir="genbank";
+        } elsif($$settings{layout} eq 'cfsan'){
+          $dumpdir="reference";
+        } else{
+          die "ERROR: I do not understand layout $$settings{layout}";
         }
 
         # Change the directory for these filenames if they aren't being
@@ -300,15 +304,13 @@ sub usage{
   --outdir     <req'd>  The output directory
   --format     tsv      The input format. Default: tsv. No other format
                         is accepted at this time.
-  --layout     onedir   onedir   - everything goes into one directory
-                        byrun    - each genome run gets its separate directory
-                        byformat - fastq files to one dir, assembly to another, etc
+  --layout     onedir   onedir   - Everything goes into one directory
+                        byrun    - Each genome run gets its separate directory
+                        byformat - Fastq files to one dir, assembly to another, etc
+                        cfsan    - Reference and samples in separate directories with
+                                   each sample in a separate subdirectory
   --shuffled   <NONE>   Output the reads as interleaved instead of individual
                         forward and reverse files.
-  --fasta      <NONE>   Convert all fastq.gz files to fasta
-  --only       <NONE>   Only download this type of data.  Good for debugging.
-                        Possible values: tree, genbank, sra
-  --verbose    <NONE>   Output more text.  Good for debugging.
   --norun      <NONE>   Do not run anything; just create a Makefile.
   --numcpus    1        How many jobs to run at once. Be careful of disk I/O.
   "
