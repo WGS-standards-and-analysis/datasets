@@ -21,8 +21,8 @@ sub logmsg{print STDERR "$0: @_\n";}
 exit main();
 
 sub main{
-  my $settings={};
-  GetOptions($settings,qw(help outdir=s format=s shuffled! fasta! layout=s only=s verbose!));
+  my $settings={run=>1};
+  GetOptions($settings,qw(help outdir=s format=s shuffled! fasta! layout=s only=s verbose! numcpus=i run!));
   die usage() if($$settings{help});
   $$settings{format}||="tsv"; # by default, input format is tsv
   $$settings{seqIdTemplate}||='@$ac_$sn[_$rn]/$ri';
@@ -30,6 +30,7 @@ sub main{
   $$settings{layout}=lc($$settings{layout});
   $$settings{only}||="";
   $$settings{only}=lc($$settings{only});
+  $$settings{numcpus}||=1;
 
   # Get the output directory and spreadsheet, and make sure they exist
   $$settings{outdir}||=die "ERROR: need outdir parameter\n".usage();
@@ -37,7 +38,7 @@ sub main{
   my $spreadsheet=$ARGV[0] || die "ERROR: need spreadsheet file!\n".usage();
   die "ERROR: cannot find $spreadsheet" if(!-e $spreadsheet);
 
-  # Read the spreadsheet
+  # Read the spreadsheet, keeping in mind which format
   my $infoTsv = {};
   if($$settings{format} eq 'tsv'){
     $infoTsv=tsvToMakeHash($spreadsheet,$settings);
@@ -45,7 +46,8 @@ sub main{
     die "ERROR: I do not understand format $$settings{format}";
   }
 
-  writeMakefile($infoTsv,$settings);
+  my $makefile=writeMakefile($$settings{outdir},$infoTsv,$settings);
+  runMakefile($$settings{outdir},$settings) if($$settings{run});
 
   return 0;
 }
@@ -64,6 +66,9 @@ sub tsvToMakeHash{
      $seqIdTemplate=~s/\$/\$\$/g;  # compatibility with make
   
   my $make={};                  # Make hash
+  $$make{"sha256sum.txt"}{CMD}=["rm -f $make_target"];
+  
+
   my $fileToName={};            # mapping filename to base name
   my $have_reached_biosample=0; # marked true when it starts reading entries
   my @header=();                # defined when we get to the biosample_acc header row
@@ -88,34 +93,118 @@ sub tsvToMakeHash{
       @F{@header}=@F;
 
       # SRA download command
-      if($F{srarun_acc}){
-        my $filename1="$F{srarun_acc}_1.fastq.gz";
-        my $filename2="$F{srarun_acc}_2.fastq.gz";
-
-        $$make{$filename2}{DEP}=[
-          $filename1,
-        ];
-        $$make{$filename1}{CMD}=[
-          "fastq-dump --defline-seq '$seqIdTemplate' --defline-qual '+' --split-files -O . --gzip $F{srarun_acc} ",
-          "echo -e \"$F{sha256sumread1}  $filename1\\n$F{sha256sumread2}  $filename2\" | sha256sum --check",
-        ];
+      if($F{srarun_acc} && $F{srarun_acc} !~ /\-|NA/i){
+        # Any error checking before we start with this entry.
         $F{strain} || die "ERROR: $F{srarun_acc} does not have a strain name!";
+
+        my $filename1="$F{strain}_1.fastq.gz";
+        my $filename2="$F{strain}_2.fastq.gz";
+        my $dumpdir='.';
+
+        if($$settings{layout} eq 'onedir'){
+          # The defaults are set up for onedir, so change nothing if the layout is onedir
+        } elsif($$settings{layout} eq 'byrun'){
+          $dumpdir=$F{strain};
+          
+        } elsif($$settings{layout} eq 'byformat'){
+          $dumpdir="reads";
+        }
+
+        # Change the directory for these filenames if they aren't being
+        # dumped into the working directory.
+        if($$settings{layout} ne 'onedir'){
+          $filename1="$dumpdir/$filename1";
+          $filename2="$dumpdir/$filename2";
+          $$make{$dumpdir}{CMD}=["mkdir -p $dumpdir"];
+        }
+
+        $$make{$filename2}={
+          DEP=>[
+            $dumpdir, $filename1,
+          ],
+          CMD=>[
+            "mv $dumpdir/$F{srarun_acc}_2.fastq.gz $make_target",
+          ],
+        };
+        $$make{$filename1}={
+          CMD=>[
+            "fastq-dump --defline-seq '$seqIdTemplate' --defline-qual '+' --split-files -O $dumpdir --gzip $F{srarun_acc} ",
+            "mv $dumpdir/$F{srarun_acc}_1.fastq.gz $make_target",
+          ],
+          DEP=>[
+            $dumpdir
+          ],
+        };
+        if($$settings{shuffled}){
+          $$make{"$dumpdir/$F{srarun_acc}.shuffled.fastq.gz"}={
+            CMD=>[
+              "run_assembly_shuffleReads.pl $filename1 $filename2 | gzip -c > $make_target",
+              #"rm -v $make_deps",
+            ],
+            DEP=>[
+              $filename1, $filename2
+            ]
+          };
+        }
+
+        # Checksums, if they exist
+        if($F{sha256sumread1} && $F{sha256sumread1} !~ /\-|NA/){
+          push(@{ $$make{"sha256sum.txt"}{CMD} }, "echo \"$F{sha256sumread1}  $filename1\" >> $make_target");
+          push(@{ $$make{"sha256sum.txt"}{DEP} }, $filename1);
+        }
+        if($F{sha256sumread2} && $F{sha256sumread2} !~ /\-|NA/){
+          push(@{ $$make{"sha256sum.txt"}{CMD} }, "echo \"$F{sha256sumread2}  $filename2\" >> $make_target");
+          push(@{ $$make{"sha256sum.txt"}{DEP} }, $filename2);
+        }
       }
 
       # GenBank download command
-      elsif($F{genbankassembly}){
-        my $filename1="$F{genbankassembly}.gbk";
-        my $filename2="$F{genbankassembly}.fasta";
-
-        $$make{$filename2}{CMD}=[
-            "esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -related -target nuccore | efetch -format fasta > $make_target",
-        ];
-        $$make{$filename1}{CMD}=[
-          "esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -related -target nuccore | efetch -format gbwithparts > $make_target",
-          "echo -e \"$F{sha256sumassembly}  $filename1\" | sha256sum --check",
-        ];
-
+      if($F{genbankassembly} && $F{genbankassembly} !~ /\-|NA/i){
+        # Any error checking before we start with this entry.
         $F{strain} || die "ERROR: $F{genbankassembly} does not have a strain name!";
+
+        my $filename1="$F{strain}.gbk";
+        my $filename2="$F{strain}.fasta";
+        my $dumpdir  ='.';
+
+        if($$settings{layout} eq 'onedir'){
+          # The defaults are set up for onedir, so change nothing if the layout is onedir
+        } elsif($$settings{layout} eq 'byrun'){
+          $dumpdir=$F{strain};
+          
+        } elsif($$settings{layout} eq 'byformat'){
+          $dumpdir="genbank";
+        }
+
+        # Change the directory for these filenames if they aren't being
+        # dumped into the working directory.
+        if($$settings{layout} ne 'onedir'){
+          $filename1="$dumpdir/$filename1";
+          $filename2="$dumpdir/$filename2";
+          $$make{$dumpdir}{CMD}=["mkdir -p $dumpdir"];
+        }
+
+        $$make{$filename2}={
+          CMD=>[
+            "esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -target nuccore -name assembly_nuccore_insdc | efetch -format fasta > $make_target",
+          ],
+          DEP=>[
+            $dumpdir,
+          ]
+        };
+        $$make{$filename1}={
+          CMD=>[
+            "esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -target nuccore -name assembly_nuccore_insdc | efetch -format gbwithparts > $make_target",
+          ],
+          DEP=>[
+            $dumpdir,
+          ]
+        };
+
+        if($F{sha256sumassembly} && $F{sha256sumassembly} !~ /\-|NA/){
+          push(@{ $$make{"sha256sum.txt"}{CMD} }, "echo \"$F{sha256sumassembly}  $filename1\" >> $make_target");
+          push(@{ $$make{"sha256sum.txt"}{DEP} }, $filename1);
+        }
       }
 
     } elsif(/^biosample_acc/){
@@ -143,35 +232,63 @@ sub tsvToMakeHash{
 
   }
   close TSV;
-  
+
+  # Last of the make target(s)
+  push(@{ $$make{"sha256sum.txt"}{CMD} }, "sha256sum -c $make_target");
+
   return $make;
 }
 
 # Thanks Torsten Seemann for the makefile idea
 sub writeMakefile{
-  my($m,$settings)=@_;
+  my($outdir,$m,$settings)=@_;
 
-  # Add on the behavior I want
+  my $makefile="$outdir/Makefile";
+
+  # Kick things off with an all
+  my $allTargets=[sort{ $a cmp $b} keys(%$m)];
+
+  # Add on the behavior I want with these fake target(s)
   $$m{'.DELETE_ON_ERROR'}={};
-  $$m{'.PHONY'}{DEP}=['%.fastq.gz', '%.gbk', '%.dnd'];
 
+  # Custom sort for how the entries are listed, in case I want
+  # to change it later.
   my @target=sort{
     #return 1 if($a=~/(^\.)|all/ && $b !~/(^\.)|all/);
     return $a cmp $b;
   } keys(%$m);
 
-  open(MAKEFILE,">makefile") or die "ERROR: could not open makefile for writing: $!";
+  open(MAKEFILE,">",$makefile) or die "ERROR: could not open $makefile for writing: $!";
+  print MAKEFILE ".PHONY: all\n\n";
+  print MAKEFILE "all: @$allTargets\n\n";
   for my $target(@target){
     my $properties=$$m{$target};
     $$properties{CMD}||=[];
     $$properties{DEP}||=[];
-    print MAKEFILE "$target: ".join(" ",@{$$properties{DEP}})."\n\n";
+    $$properties{DEP} = [grep {!/^\.$/} @{ $$properties{DEP} }];    # remove CWD from any dependency list
+    print MAKEFILE "$target: ".join(" ",@{$$properties{DEP}})."\n";
     for my $cmd(@{ $$properties{CMD} }){
       print MAKEFILE "\t$cmd\n";
     }
+    print MAKEFILE "\n";
   }
+
+  return $makefile;
 }
 
+sub runMakefile{
+  my($dir,$settings)=@_;
+  my $command="nice make --directory=$dir --jobs=$$settings{numcpus}";
+  if($$settings{run}){
+    system("$command 2>&1");
+    die if $?;
+  } else {
+    logmsg "User has specified --norun; to finish running this script, use a make command like so:
+      $command";
+  }
+
+  return 1;
+}
 
 sub usage{
   "  $0: Reads a standard dataset spreadsheet and downloads its data
@@ -191,7 +308,9 @@ sub usage{
   --fasta      <NONE>   Convert all fastq.gz files to fasta
   --only       <NONE>   Only download this type of data.  Good for debugging.
                         Possible values: tree, genbank, sra
-  --verbose    <NODE>   Output more text.  Good for debugging.
+  --verbose    <NONE>   Output more text.  Good for debugging.
+  --norun      <NONE>   Do not run anything; just create a Makefile.
+  --numcpus    1        How many jobs to run at once. Be careful of disk I/O.
   "
 }
 
