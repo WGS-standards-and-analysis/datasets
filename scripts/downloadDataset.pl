@@ -12,6 +12,8 @@ use Data::Dumper;
 use File::Basename qw/fileparse dirname basename/;
 use File::Temp qw/tempdir tempfile/;
 
+use ExtUtils::MakeMaker;
+
 my $scriptInvocation="$0 ".join(" ",@ARGV);
 local $0=basename $0;
 sub logmsg{print STDERR "$0: @_\n";}
@@ -19,44 +21,72 @@ sub logmsg{print STDERR "$0: @_\n";}
 exit main();
 
 sub main{
-  my $settings={};
-  GetOptions($settings,qw(help outdir=s format=s shuffled! fasta! layout=s only=s verbose!));
+  my $settings={run=>1};
+  GetOptions($settings,qw(help outdir=s format=s shuffled! layout=s numcpus=i run!));
   die usage() if($$settings{help});
   $$settings{format}||="tsv"; # by default, input format is tsv
   $$settings{seqIdTemplate}||='@$ac_$sn[_$rn]/$ri';
   $$settings{layout}||="onedir";
   $$settings{layout}=lc($$settings{layout});
-  $$settings{only}||="";
-  $$settings{only}=lc($$settings{only});
+  $$settings{numcpus}||=1;
 
   # Get the output directory and spreadsheet, and make sure they exist
   $$settings{outdir}||=die "ERROR: need outdir parameter\n".usage();
   mkdir $$settings{outdir} if(!-d $$settings{outdir});
-  my $tsv=$ARGV[0] || die "ERROR: need tsv file!\n".usage();
-  die "ERROR: cannot find $tsv" if(!-e $tsv);
+  my $spreadsheet=$ARGV[0] || die "ERROR: need spreadsheet file!\n".usage();
+  die "ERROR: cannot find $spreadsheet" if(!-e $spreadsheet);
 
-  # Read the spreadsheet
-  my $infoTsv=readTsv($tsv,$settings);
+  # Read the spreadsheet, keeping in mind which format
+  my $infoTsv = {};
+  if($$settings{format} eq 'tsv'){
+    $infoTsv=tsvToMakeHash($spreadsheet,$settings);
+  } else {
+    die "ERROR: I do not understand format $$settings{format}";
+  }
 
-  # Download everything
-  downloadEverything($infoTsv,$settings);
+  my $makefile=writeMakefile($$settings{outdir},$infoTsv,$settings);
+  runMakefile($$settings{outdir},$settings);
 
   return 0;
 }
 
-sub readTsv{
+sub tsvToMakeHash{
   my($tsv,$settings)=@_;
+
+  # Thanks Torsten Seemann for this idea
+  my $make_target = '$@';
+  my $make_dep = '$<';
+  my $make_deps = '$^';
+  my $bash_dollar = '$$';
 
   # For the fastq-dump command
   my $seqIdTemplate=$$settings{seqIdTemplate};
+     $seqIdTemplate=~s/\$/\$\$/g;  # compatibility with make
   
-  my $d={}; # download hash
+  # Initialize a make hash
+  my $make={};
+  $$make{"sha256sum.txt"}{CMD}=["rm -f $make_target"];
+  $$make{"all"}={
+    CMD=>[
+      '@echo "DONE! If you used this script in a publication, please cite us at github.com/WGS-standards-and-analysis/datasets"',
+    ],
+    DEP=>[
+      "tree.dnd",
+      "sha256sum.txt",
+    ],
+  };
+  $$make{".PHONY"}{DEP}=['all'];
+  $$make{".DEFAULT"}{DEP}=['all'];
+  $$make{".DEFAULT"}{".DELETE_ON_ERROR"}=[];
+  $$make{".DEFAULT"}{".SUFFIXES"}=[];
+
+  my $fileToName={};            # mapping filename to base name
   my $have_reached_biosample=0; # marked true when it starts reading entries
-  my @header=(); # defined when we get to the biosample_acc header row
+  my @header=();                # defined when we get to the biosample_acc header row
   open(TSV,$tsv) or die "ERROR: could not open $tsv: $!";
   while(<TSV>){
     s/^\s+|\s+$//g; # trim whitespace
-    next if(/^$/); # skip blank lines
+    next if(/^$/);  # skip blank lines
 
     ## read the contents
     # Read biosample rows
@@ -74,43 +104,130 @@ sub readTsv{
       @F{@header}=@F;
 
       # SRA download command
-      if($F{srarun_acc}){
-        $$d{$F{srarun_acc}}{download}="fastq-dump --defline-seq '$seqIdTemplate' --defline-qual '+' --split-files -O $tmpdir --gzip $F{srarun_acc} ";
-        $$d{$F{srarun_acc}}{name}=$F{strain} || die "ERROR: $F{srarun_acc} does not have a strain name!";
-        $$d{$F{srarun_acc}}{type}="sra";
-        $$d{$F{srarun_acc}}{tempdir}=$tmpdir;
+      if($F{srarun_acc} && $F{srarun_acc} !~ /\-|NA/i){
+        # Any error checking before we start with this entry.
+        $F{strain} || die "ERROR: $F{srarun_acc} does not have a strain name!";
 
-        # Files will be listed as from=>to, and they will have checksums
-        $$d{$F{srarun_acc}}{from}=["$tmpdir/$F{srarun_acc}_1.fastq.gz", "$tmpdir/$F{srarun_acc}_2.fastq.gz"];
-        $$d{$F{srarun_acc}}{to}=["$$settings{outdir}/$F{strain}_1.fastq.gz", "$$settings{outdir}/$F{strain}_2.fastq.gz"];
-        $$d{$F{srarun_acc}}{checksum}=[$F{sha256sumread1},$F{sha256sumread2}];
-        if($$settings{layout} eq 'byrun'){
-          $$d{$F{srarun_acc}}{to}=["$$settings{outdir}/$F{strain}/$F{strain}_1.fastq.gz","$$settings{outdir}/$F{strain}/$F{strain}_2.fastq.gz"];
-        }elsif($$settings{layout} eq 'byformat'){
-          $$d{$F{srarun_acc}}{to}=["$$settings{outdir}/reads/$F{strain}_1.fastq.gz","$$settings{outdir}/reads/$F{strain}_2.fastq.gz"];
+        my $filename1="$F{strain}_1.fastq.gz";
+        my $filename2="$F{strain}_2.fastq.gz";
+        my $dumpdir='.';
+
+        if($$settings{layout} eq 'onedir'){
+          # The defaults are set up for onedir, so change nothing if the layout is onedir
+        } elsif($$settings{layout} eq 'byrun'){
+          $dumpdir=$F{strain};
+        } elsif($$settings{layout} eq 'byformat'){
+          $dumpdir="reads";
+        } elsif($$settings{layout} eq 'cfsan'){
+          $dumpdir="samples/$F{strain}";
+        } else{
+          die "ERROR: I do not understand layout $$settings{layout}";
+        }
+
+        # Change the directory for these filenames if they aren't being
+        # dumped into the working directory.
+        if($$settings{layout} ne 'onedir'){
+          $filename1="$dumpdir/$filename1";
+          $filename2="$dumpdir/$filename2";
+          $$make{$dumpdir}{CMD}=["mkdir -p $make_target"];
+        }
+
+        $$make{$filename2}={
+          DEP=>[
+            $dumpdir, $filename1,
+          ],
+          CMD=>[
+            "mv $dumpdir/$F{srarun_acc}_2.fastq.gz $make_target",
+          ],
+        };
+        $$make{$filename1}={
+          CMD=>[
+            "fastq-dump --defline-seq '$seqIdTemplate' --defline-qual '+' --split-files -O $dumpdir --gzip $F{srarun_acc} ",
+            "mv $dumpdir/$F{srarun_acc}_1.fastq.gz $make_target",
+          ],
+          DEP=>[
+            $dumpdir
+          ],
+        };
+        if($$settings{shuffled}){
+          my $filename3="$dumpdir/$F{strain}.shuffled.fastq.gz";
+          $$make{$filename3}={
+            CMD=>[
+              "run_assembly_shuffleReads.pl $filename1 $filename2 | gzip -c > $make_target",
+              #"rm -v $make_deps",
+            ],
+            DEP=>[
+              $filename1, $filename2
+            ]
+          };
+          push(@{ $$make{"all"}{DEP} }, $filename3);
+        }
+
+        # Checksums, if they exist
+        if($F{sha256sumread1} && $F{sha256sumread1} !~ /\-|NA/){
+          push(@{ $$make{"sha256sum.txt"}{CMD} }, "echo \"$F{sha256sumread1}  $filename1\" >> $make_target");
+          push(@{ $$make{"sha256sum.txt"}{DEP} }, $filename1);
+        }
+        if($F{sha256sumread2} && $F{sha256sumread2} !~ /\-|NA/){
+          push(@{ $$make{"sha256sum.txt"}{CMD} }, "echo \"$F{sha256sumread2}  $filename2\" >> $make_target");
+          push(@{ $$make{"sha256sum.txt"}{DEP} }, $filename2);
         }
       }
 
       # GenBank download command
-      if($F{genbankassembly}){
-        $$d{$F{genbankassembly}}{download} ="esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -related -target nuccore > $tmpdir/edirect.xml && ";
-        $$d{$F{genbankassembly}}{download}.="cat $tmpdir/edirect.xml | efetch -format gbwithparts > $tmpdir/$F{genbankassembly}.gbk && ";
-        $$d{$F{genbankassembly}}{download}.="cat $tmpdir/edirect.xml | efetch -format fasta       > $tmpdir/$F{genbankassembly}.fasta";
+      if($F{genbankassembly} && $F{genbankassembly} !~ /\-|NA/i){
+        # Any error checking before we start with this entry.
+        $F{strain} || die "ERROR: $F{genbankassembly} does not have a strain name!";
 
-        $$d{$F{genbankassembly}}{name}=$F{strain} || die "ERROR: $F{genbankassembly} does not have a strain name!";
-        $$d{$F{genbankassembly}}{type}="genbank";
-        $$d{$F{genbankassembly}}{tempdir}=$tmpdir;
+        my $filename1="$F{strain}.gbk";
+        my $filename2="$F{strain}.fasta";
+        my $dumpdir  ='.';
 
-        # Files will be listed as from=>to, and they will have checksums
-        $$d{$F{genbankassembly}}{from}=["$tmpdir/$F{genbankassembly}.gbk","$tmpdir/$F{genbankassembly}.fasta"];
-        $$d{$F{genbankassembly}}{to}=["$$settings{outdir}/$F{strain}.gbk","$$settings{outdir}/$F{strain}.fasta"];
-        $$d{$F{genbankassembly}}{checksum}=[$F{sha256sumassembly},"-"];
+        if($$settings{layout} eq 'onedir'){
+          # The defaults are set up for onedir, so change nothing if the layout is onedir
+        } elsif($$settings{layout} eq 'byrun'){
+          $dumpdir=$F{strain};
+        } elsif($$settings{layout} eq 'byformat'){
+          $dumpdir="genbank";
+        } elsif($$settings{layout} eq 'cfsan'){
+          # Only the reference genome belongs in this folder
+          if($F{suggestedreference} =~ /^(true|1)$/i){
+            $dumpdir="reference";
+          } else {
+            $dumpdir="samples/$F{strain}";
+          }
+        } else{
+          die "ERROR: I do not understand layout $$settings{layout}";
+        }
 
-        $$d{$F{genbankassembly}}{$_} = $F{$_} for(qw(suggestedreference outbreak datasetname));
-        if($$settings{layout} eq 'byrun'){
-          $$d{$F{genbankassembly}}{to}=["$$settings{outdir}/$F{strain}.gbk","$$settings{outdir}/$F{strain}.fasta"];
-        }elsif($$settings{layout} eq 'byformat'){
-          $$d{$F{genbankassembly}}{to}=["$$settings{outdir}/genbank/$F{strain}.gbk","$$settings{outdir}/genbank/$F{strain}.fasta"];
+        # Change the directory for these filenames if they aren't being
+        # dumped into the working directory.
+        if($$settings{layout} ne 'onedir'){
+          $filename1="$dumpdir/$filename1";
+          $filename2="$dumpdir/$filename2";
+          $$make{$dumpdir}{CMD}=["mkdir -p $dumpdir"];
+        }
+
+        $$make{$filename2}={
+          CMD=>[
+            "esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -target nuccore -name assembly_nuccore_insdc | efetch -format fasta > $make_target",
+          ],
+          DEP=>[
+            $dumpdir,
+          ]
+        };
+        $$make{$filename1}={
+          CMD=>[
+            "esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -target nuccore -name assembly_nuccore_insdc | efetch -format gbwithparts > $make_target",
+          ],
+          DEP=>[
+            $dumpdir,
+          ]
+        };
+
+        if($F{sha256sumassembly} && $F{sha256sumassembly} !~ /\-|NA/){
+          push(@{ $$make{"sha256sum.txt"}{CMD} }, "echo \"$F{sha256sumassembly}  $filename1\" >> $make_target");
+          push(@{ $$make{"sha256sum.txt"}{DEP} }, $filename1);
         }
       }
 
@@ -126,246 +243,72 @@ sub readTsv{
       $value||="";            # in case of blank values
       $value=~s/^\s+|\s+$//g; # trim whitespace
       $value=~s/\s+/_/g;      # turn whitespace into underscores
-      $$d{$key}=$value;
+      #$$d{$key}=$value;
+      #
+      if($key eq 'tree'){
+        $$make{"tree.dnd"}={
+          CMD=>[
+            "wget -O $make_target '$value'",
+          ],
+        };
+      }
     }
 
   }
   close TSV;
 
-  ## Any other misc thing to download
-  # Start-up variables
-  my $miscTempdir=tempdir("$0XXXXXX",TMPDIR=>1,CLEANUP=>1);
-  my $miscBasename=join("__",$$d{organism},$$d{outbreak});
-  my $miscPrefix="$miscTempdir/$miscBasename";
+  # Last of the make target(s)
+  push(@{ $$make{"sha256sum.txt"}{CMD} }, "sha256sum -c $make_target");
 
-  # Tree: currently it is set up like $$d{tree}="http://"
-  my $treeUrl=$$d{tree};
-  delete($$d{tree});
-  $$d{tree}={
-    download=>"wget -O $miscPrefix.dnd '$treeUrl'",
-    type=>"tree",
-    checksum=>["-"],
-    from=>["$miscPrefix.dnd"],
-    to=>["$$settings{outdir}/$miscBasename.dnd"],
-    tempdir=>$miscTempdir,
-    name=>"tree",
-  };
-
-  # Also load up the dataset information
-  $$d{information}={
-    download=>"echo -e \"downloadedWith\t$scriptInvocation\" > $miscPrefix.dataset.tsv && cat $tsv >> $miscPrefix.dataset.tsv",
-    type=>"spreadsheet",
-    checksum=>["-"],
-    from=>["$miscPrefix.dataset.tsv"],
-    to=>["$$settings{outdir}/$miscBasename.dataset.tsv"],
-    tempdir=>$miscTempdir,
-    name=>"spreadsheet",
-  };
-
-  return $d;
+  return $make;
 }
 
-sub downloadEverything{
-  my($d,$settings)=@_;
+# Thanks Torsten Seemann for the makefile idea
+sub writeMakefile{
+  my($outdir,$m,$settings)=@_;
 
-  # Read each entry one at a time.  Each entry is a hash
-  # consisting of: type, name, download, tempdir.
-  while(my($key,$value)=each(%$d)){
-    # Skip blank values
-    next if($key eq "" || $key=~/^(\-|NA|N\/A)$/);
+  my $makefile="$outdir/Makefile";
 
-    # Only download entries which are hash values and which have a download command
-    next if(ref($value) ne "HASH" || !defined($$value{download}));
+  # Custom sort for how the entries are listed, in case I want
+  # to change it later.
+  my @target=sort{
+    return -1 if ($a eq 'all');
+    #return 1 if($a=~/(^\.)|all/ && $b !~/(^\.)|all/);
+    return $a cmp $b;
+  } keys(%$m);
 
-    # Get some local variables to make it more readable downstream
-    my($type,$name,$download,$tempdir)=($$value{type},$$value{name},$$value{download},$$value{tempdir});
-    #logmsg "DEBUG"; next if(!defined($type) || $type ne 'tree');
-    if($$settings{only}){
-      next if(!defined($type));
-      next if($type ne $$settings{only});
+  open(MAKEFILE,">",$makefile) or die "ERROR: could not open $makefile for writing: $!";
+  print MAKEFILE "SHELL := /bin/bash\n";
+  print MAKEFILE "MAKEFLAGS += --no-builtin-rules\n";
+  print MAKEFILE "MAKEFLAGS += --no-builtin-variables\n";
+  print MAKEFILE "\n";
+  for my $target(@target){
+    my $properties=$$m{$target};
+    $$properties{CMD}||=[];
+    $$properties{DEP}||=[];
+    $$properties{DEP} = [grep {!/^\.$/} @{ $$properties{DEP} }];    # remove CWD from any dependency list
+    print MAKEFILE "$target: ".join(" ",@{$$properties{DEP}})."\n";
+    for my $cmd(@{ $$properties{CMD} }){
+      print MAKEFILE "\t$cmd\n";
     }
-
-    # Skip this download if the target files exist
-    my $numFiles=scalar(@{$$value{from}});
-    my $i_can_skip=1; # true until proven false
-    for(my $i=0;$i<$numFiles;$i++){
-      my $to=$$value{to}[$i];
-      my $checksum=$$value{checksum}[$i] || "";
-
-      # I cannot skip this download if:
-      #   1) The file doesn't exist yet OR
-      #   2) The checksum doesn't match
-      $i_can_skip=0 if(!-e $to || (defined($checksum) && sha256sum($to) ne $checksum));
-    }
-    if($i_can_skip){
-      logmsg "I found the files for $name/$type and so I can skip this download";
-    }
-
-    # Perform the download unless given permission to skip it
-    #logmsg "DEBUG"; $i_can_skip=1;
-    if(!$i_can_skip){
-      logmsg "Downloading $name/$type to $tempdir";
-      logmsg "    $download" if($$settings{verbose});
-      system($download);
-      die "ERROR downloading with command\n  $download" if $?;
-    }
-      
-    # Move the files according to how the download entry states.
-    for(my $i=0;$i<$numFiles;$i++){
-      my($from,$to,$checksum)=($$value{from}[$i],$$value{to}[$i],$$value{checksum}[$i]);
-      $checksum||="";
-
-      if(!$i_can_skip){
-        logmsg "$from => $to  ($checksum)";
-        mkdir(dirname($to)) if(!-d dirname($to));
-        system("mv -v $from $to") if(!$i_can_skip);
-        die "ERROR moving $from to $to" if $?;
-      }
-
-      # See if the file downloaded.  Produce a warning if:
-      #   1) checksum is present AND
-      #   2) checksum is not the same as in the spreadsheet
-      my $calculatedChecksum=sha256sum($to);
-      # Checksum is not present if the cell is blank, has a dash, or has N/A or NA
-      if(!defined($checksum) || $checksum=~/^\-+|NA|N\/A$/i){
-        logmsg "WARNING: checksum was not defined for $to";
-      } elsif ($calculatedChecksum ne $checksum){
-        logmsg "WARNING: the checksum for the file and the checksum listed in the spreadsheet don't match!\n  spreadsheet: $checksum\n  $to: $calculatedChecksum";
-      }
-
-      # Perform any kind of post-processing after the file arrives.
-      postProcessFile($to,$type,$value,$settings);
-    }
-
-    # Post-process whatever is requested on a set of files
-    postProcessFileSet($value,$settings);
+    print MAKEFILE "\n";
   }
 
-  # I can't think of any useful return value at this time.
+  return $makefile;
+}
+
+sub runMakefile{
+  my($dir,$settings)=@_;
+  my $command="nice make tree.dnd sha256sum.txt --directory=$dir --jobs=$$settings{numcpus}";
+  if($$settings{run}){
+    system("$command 2>&1");
+    die if $?;
+  } else {
+    logmsg "User has specified --norun; to finish running this script, use a make command like so:
+      $command";
+  }
+
   return 1;
-}
-
-# Perform any kind of post processing after a file has landed
-# in the destination directory.
-sub postProcessFile{
-  my($file,$type,$fileInfo,$settings)=@_;
-  ## Any kind of special processing, after the download.
-
-  ## Fastq file post-processing
-  if($type eq 'sra'){
-    # Create fasta files if requested
-    if($$settings{fasta}){
-      my $fasta=dirname($file)."/".basename($file,qw(.fastq.gz)).".fasta";
-      fastqToFasta($file,$fasta,$settings) if(!-e $fasta);
-    }
-  }
-
-  ## GenBank file post processing
-  elsif($type eq 'genbank'){
-    #my $fasta=dirname($file)."/".basename($file,qw(.gbk .gb)).".fasta";
-    #genbankToFasta($file,$fasta,$settings) if(!-e $fasta);
-  }
-}
-
-sub postProcessFileSet{
-  my($fileInfo,$settings)=@_;
-  ## SRA files
-  #    1. shuffle reads
-  if($$fileInfo{type} eq 'sra'){
-    my $shuffled=dirname($$fileInfo{to}[0])."/".basename($$fileInfo{to}[0],qw(_1.fastq.gz)).".shuffled.fastq.gz";
-    # Shuffle the reads if the user wants it and if the shuffled file isn't already there
-    if($$settings{shuffled} && !-e $shuffled){
-      shuffleFastqGz($$fileInfo{to}[0],$$fileInfo{to}[1],$shuffled,$settings);
-    }
-  } 
-  ## Genbank files
-  #    Nothing to do right now that can't be done under postProcessFile()
-  elsif($$fileInfo{type} eq 'genbank'){
-    
-  }
-}
-
-########################
-## utility subroutines
-########################
-
-# Convert a genbank to a fasta file
-sub genbankToFasta{
-  my($genbank,$fasta,$settings)=@_;
-  die "Deprecated";
-  logmsg "Also generating $fasta.tmp";
-  my $in=Bio::SeqIO->new(-file=>$genbank,-verbose=>-1);
-  my $out=Bio::SeqIO->new(-file=>">$fasta.tmp",-format=>"fasta");
-  while(my $seq=$in->next_seq){
-    $out->write_seq($seq);
-  }
-  $out->close;
-  $in->close; 
-
-  mkdir(dirname($fasta)) if(!-d dirname($fasta));
-  system("mv -v $fasta.tmp $fasta"); die if $?;
-}
-
-# Convert a fastq to a fasta file
-sub fastqToFasta{
-  my($fastq,$fasta,$settings)=@_;
-  logmsg "Converting $fastq => $fasta.tmp";
-  open(FASTQ,"zcat $fastq |") or die "ERROR: could not open $fastq: $!";
-  open(FASTA,">","$fasta.tmp") or die "ERROR: could not write to $fasta.tmp: $!";
-  my $i=0;
-  while(my $line=<FASTQ>){
-    $i++;
-    my $mod=$i % 4;
-    if($mod==1){
-      print FASTA ">".substr($line,1);
-    } elsif($mod==2){
-      print FASTA $line;
-    } elsif($mod==3 || $mod==4){
-      next;
-    }
-  }
-  close FASTQ;
-  close FASTA;
-
-  mkdir(dirname($fasta)) if(!-d dirname($fasta));
-  system("mv -v $fasta.tmp $fasta"); die if $?;
-}
-
-# Shuffle two fastq.gz files
-sub shuffleFastqGz{
-  my($file1,$file2,$shuffled,$settings)=@_;
-  my ($tmpFh,$tmpfile)=tempfile("XXXXXX",TMPDIR=>1,CLEANUP=>1,SUFFIX=>".fastq");
-  logmsg "Shuffling $file1 and $file2 into $tmpfile, and then moving to $shuffled";
-  open(R1,"gunzip -c $file1 | ") or die "ERROR: could not open $file1 for reading: $!";
-  open(R2,"gunzip -c $file2 | ") or die "ERROR: could not open $file2 for reading: $!";
-  while(my $line=<R1>){
-    # Print read 1
-    print $tmpFh $line;
-    for(1..3){
-      $line=<R1>;
-      print $tmpFh $line;
-    }
-    # Print read 2
-    for(1..4){
-      $line=<R2>;
-      print $tmpFh $line;
-    }
-  }
-  close R1; close R2;
-  close $tmpFh; # close it only after being totally done with it
-  
-  # Gzip into the correct file and then remove the tmpfile
-  system("gzip -v $tmpfile && mv -v $tmpfile.gz $shuffled");
-  die "ERROR: could not gzip $tmpfile into $shuffled" if $?;
-}
-
-sub sha256sum{
-  my ($file)=@_;
-  my $checksum=`sha256sum $file`;
-  die "ERROR with checksum for $file" if $?;
-  chomp($checksum);
-  $checksum=~s/\s+.*$//; # remove the filename
-  return $checksum;
 }
 
 sub usage{
@@ -378,15 +321,16 @@ sub usage{
   --outdir     <req'd>  The output directory
   --format     tsv      The input format. Default: tsv. No other format
                         is accepted at this time.
-  --layout     onedir   onedir   - everything goes into one directory
-                        byrun    - each genome run gets its separate directory
-                        byformat - fastq files to one dir, assembly to another, etc
+  --layout     onedir   onedir   - Everything goes into one directory
+                        byrun    - Each genome run gets its separate directory
+                        byformat - Fastq files to one dir, assembly to another, etc
+                        cfsan    - Reference and samples in separate directories with
+                                   each sample in a separate subdirectory
   --shuffled   <NONE>   Output the reads as interleaved instead of individual
                         forward and reverse files.
-  --fasta      <NONE>   Convert all fastq.gz files to fasta
-  --only       <NONE>   Only download this type of data.  Good for debugging.
-                        Possible values: tree, genbank, sra
-  --verbose    <NODE>   Output more text.  Good for debugging.
+  --norun      <NONE>   Do not run anything; just create a Makefile.
+  --numcpus    1        How many jobs to run at once. Be careful of disk I/O.
   "
 }
+
 
