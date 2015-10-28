@@ -45,7 +45,7 @@ sub main{
   }
 
   my $makefile=writeMakefile($$settings{outdir},$infoTsv,$settings);
-  runMakefile($$settings{outdir},$settings) if($$settings{run});
+  runMakefile($$settings{outdir},$settings);
 
   return 0;
 }
@@ -63,9 +63,18 @@ sub tsvToMakeHash{
   my $seqIdTemplate=$$settings{seqIdTemplate};
      $seqIdTemplate=~s/\$/\$\$/g;  # compatibility with make
   
-  my $make={};                  # Make hash
+  # Initialize a make hash
+  my $make={};
   $$make{"sha256sum.txt"}{CMD}=["rm -f $make_target"];
-  
+  $$make{"all"}={
+    CMD=>[
+      '@echo "DONE! If you used this script in a publication, please cite us at github.com/WGS-standards-and-analysis/datasets"',
+    ],
+    DEP=>[
+      "tree.dnd",
+      "sha256sum.txt",
+    ],
+  };
 
   my $fileToName={};            # mapping filename to base name
   my $have_reached_biosample=0; # marked true when it starts reading entries
@@ -137,7 +146,8 @@ sub tsvToMakeHash{
           ],
         };
         if($$settings{shuffled}){
-          $$make{"$dumpdir/$F{srarun_acc}.shuffled.fastq.gz"}={
+          my $filename3="$dumpdir/$F{strain}.shuffled.fastq.gz";
+          $$make{$filename3}={
             CMD=>[
               "run_assembly_shuffleReads.pl $filename1 $filename2 | gzip -c > $make_target",
               #"rm -v $make_deps",
@@ -146,6 +156,7 @@ sub tsvToMakeHash{
               $filename1, $filename2
             ]
           };
+          push(@{ $$make{"all"}{DEP} }, $filename3);
         }
 
         # Checksums, if they exist
@@ -175,7 +186,12 @@ sub tsvToMakeHash{
         } elsif($$settings{layout} eq 'byformat'){
           $dumpdir="genbank";
         } elsif($$settings{layout} eq 'cfsan'){
-          $dumpdir="reference";
+          # Only the reference genome belongs in this folder
+          if($F{suggestedreference} =~ /^(true|1)$/i){
+            $dumpdir="reference";
+          } else {
+            $dumpdir="samples/$F{strain}";
+          }
         } else{
           die "ERROR: I do not understand layout $$settings{layout}";
         }
@@ -250,10 +266,7 @@ sub writeMakefile{
   my $makefile="$outdir/Makefile";
 
   # Kick things off with an all
-  my $allTargets=[sort{ $a cmp $b} keys(%$m)];
-
-  # Add on the behavior I want with these fake target(s)
-  $$m{'.DELETE_ON_ERROR'}={};
+  #my $allTargets=[sort{ $a cmp $b} keys(%$m)];
 
   # Custom sort for how the entries are listed, in case I want
   # to change it later.
@@ -264,7 +277,11 @@ sub writeMakefile{
 
   open(MAKEFILE,">",$makefile) or die "ERROR: could not open $makefile for writing: $!";
   print MAKEFILE ".PHONY: all\n\n";
-  print MAKEFILE "all: @$allTargets\n\n";
+  print MAKEFILE "SHELL := /bin/bash\n";
+  print MAKEFILE "MAKEFLAGS += --no-builtin-rules\n";
+  print MAKEFILE "MAKEFLAGS += --no-builtin-variables\n";
+  print MAKEFILE ".DELETE_ON_ERROR:\n";
+  print MAKEFILE ".SUFFIXES:\n";
   for my $target(@target){
     my $properties=$$m{$target};
     $$properties{CMD}||=[];
@@ -282,7 +299,7 @@ sub writeMakefile{
 
 sub runMakefile{
   my($dir,$settings)=@_;
-  my $command="nice make --directory=$dir --jobs=$$settings{numcpus}";
+  my $command="nice make tree.dnd sha256sum.txt --directory=$dir --jobs=$$settings{numcpus}";
   if($$settings{run}){
     system("$command 2>&1");
     die if $?;
