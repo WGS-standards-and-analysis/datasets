@@ -8,20 +8,20 @@ To run, you need a dataset in tsv format.  Here is the usage statement:
   Brought to you by the WGS Standards and Analysis working group
   https://github.com/WGS-standards-and-analysis/datasets
 
-  Usage: downloadDataset.pl -o outdir spreadsheet.dataset.tsv
-  PARAM        DEFAULT  DESCRIPTION
-  --outdir     <req d>  The output directory
-  --format     tsv      The input format. Default: tsv. No other format
-                        is accepted at this time.
-  --layout     onedir   onedir   - Everything goes into one directory
-                        byrun    - Each genome run gets its separate directory
-                        byformat - Fastq files to one dir, assembly to another, etc
-                        cfsan    - Reference and samples in separate directories with
-                                   each sample in a separate subdirectory
-  --shuffled   <NONE>   Output the reads as interleaved instead of individual
-                        forward and reverse files.
-  --norun      <NONE>   Do not run anything; just create a Makefile.
-  --numcpus    1        How many jobs to run at once. Be careful of disk I/O.
+    Usage: downloadDataset.pl -o outdir spreadsheet.dataset.tsv
+    PARAM        DEFAULT  DESCRIPTION
+    --outdir     <req d>  The output directory
+    --format     tsv      The input format. Default: tsv. No other format
+                          is accepted at this time.
+    --layout     onedir   onedir   - Everything goes into one directory
+                          byrun    - Each genome run gets its separate directory
+                          byformat - Fastq files to one dir, assembly to another, etc
+                          cfsan    - Reference and samples in separate directories with
+                                     each sample in a separate subdirectory
+    --shuffled   <NONE>   Output the reads as interleaved instead of individual
+                          forward and reverse files.
+    --norun      <NONE>   Do not run anything; just create a Makefile.
+    --numcpus    1        How many jobs to run at once. Be careful of disk I/O.
 
 
 ## Dependencies
