@@ -75,6 +75,10 @@ sub tsvToMakeHash{
       "sha256sum.txt",
     ],
   };
+  $$make{".PHONY"}{DEP}=['all'];
+  $$make{".DEFAULT"}{DEP}=['all'];
+  $$make{".DEFAULT"}{".DELETE_ON_ERROR"}=[];
+  $$make{".DEFAULT"}{".SUFFIXES"}=[];
 
   my $fileToName={};            # mapping filename to base name
   my $have_reached_biosample=0; # marked true when it starts reading entries
@@ -125,7 +129,7 @@ sub tsvToMakeHash{
         if($$settings{layout} ne 'onedir'){
           $filename1="$dumpdir/$filename1";
           $filename2="$dumpdir/$filename2";
-          $$make{$dumpdir}{CMD}=["mkdir -p $dumpdir"];
+          $$make{$dumpdir}{CMD}=["mkdir -p $make_target"];
         }
 
         $$make{$filename2}={
@@ -265,23 +269,19 @@ sub writeMakefile{
 
   my $makefile="$outdir/Makefile";
 
-  # Kick things off with an all
-  #my $allTargets=[sort{ $a cmp $b} keys(%$m)];
-
   # Custom sort for how the entries are listed, in case I want
   # to change it later.
   my @target=sort{
+    return -1 if ($a eq 'all');
     #return 1 if($a=~/(^\.)|all/ && $b !~/(^\.)|all/);
     return $a cmp $b;
   } keys(%$m);
 
   open(MAKEFILE,">",$makefile) or die "ERROR: could not open $makefile for writing: $!";
-  print MAKEFILE ".PHONY: all\n\n";
   print MAKEFILE "SHELL := /bin/bash\n";
   print MAKEFILE "MAKEFLAGS += --no-builtin-rules\n";
   print MAKEFILE "MAKEFLAGS += --no-builtin-variables\n";
-  print MAKEFILE ".DELETE_ON_ERROR:\n";
-  print MAKEFILE ".SUFFIXES:\n";
+  print MAKEFILE "\n";
   for my $target(@target){
     my $properties=$$m{$target};
     $$properties{CMD}||=[];
