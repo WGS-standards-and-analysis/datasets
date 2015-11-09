@@ -11,10 +11,12 @@ use Getopt::Long;
 use Data::Dumper;
 use File::Basename qw/fileparse dirname basename/;
 use File::Temp qw/tempdir tempfile/;
+use File::Spec;
 
 use ExtUtils::MakeMaker;
 
 my $scriptInvocation="$0 ".join(" ",@ARGV);
+my $scriptsDir=dirname(File::Spec->rel2abs($0));
 local $0=basename $0;
 sub logmsg{print STDERR "$0: @_\n";}
 
@@ -210,12 +212,14 @@ sub tsvToMakeHash{
 
         $$make{$filename2}={
           CMD=>[
-            "esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -target nuccore -name assembly_nuccore_insdc | efetch -format fasta > $make_target",
+            "\@echo running gbk2fas.sed to create $make_target",
+            "gbk2fas.sed $filename1 > $make_target",
           ],
           DEP=>[
-            $dumpdir,
+            $dumpdir, $filename1
           ]
         };
+        push(@{ $$make{"all"}{DEP} }, $filename2);
         $$make{$filename1}={
           CMD=>[
             "esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -target nuccore -name assembly_nuccore_insdc | efetch -format gbwithparts > $make_target",
@@ -281,6 +285,7 @@ sub writeMakefile{
   print MAKEFILE "SHELL := /bin/bash\n";
   print MAKEFILE "MAKEFLAGS += --no-builtin-rules\n";
   print MAKEFILE "MAKEFLAGS += --no-builtin-variables\n";
+  print MAKEFILE "export PATH := $scriptsDir:\$(PATH)\n";
   print MAKEFILE "\n";
   for my $target(@target){
     my $properties=$$m{$target};
@@ -299,7 +304,7 @@ sub writeMakefile{
 
 sub runMakefile{
   my($dir,$settings)=@_;
-  my $command="nice make tree.dnd sha256sum.txt --directory=$dir --jobs=$$settings{numcpus}";
+  my $command="nice make all --directory=$dir --jobs=$$settings{numcpus}";
   if($$settings{run}){
     system("$command 2>&1");
     die if $?;
