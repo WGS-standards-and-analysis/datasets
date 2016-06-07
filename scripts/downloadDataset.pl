@@ -255,6 +255,9 @@ sub tsvToMakeHash{
             "wget -O $make_target '$value'",
           ],
         };
+        if($value eq "" || $value eq "-"){
+          $$make{"tree.dnd"}{CMD}=["echo 'No tree was supplied'"];
+        }
       }
     }
 
