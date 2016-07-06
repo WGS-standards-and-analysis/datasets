@@ -84,7 +84,7 @@ sub main{
                       print $cell -> {Val}, $$settings{sep};
                   }
                   else{
-                      print $$settings{sep}.$$settings{sep};
+                      print $$settings{sep};
                   }
               }
               print "\n";
