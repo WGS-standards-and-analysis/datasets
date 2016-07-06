@@ -144,6 +144,7 @@ sub tsvToMakeHash{
         };
         $$make{$filename1}={
           CMD=>[
+            "\@echo Downloading $make_target ($F{srarun_acc})",
             "fastq-dump --defline-seq '$seqIdTemplate' --defline-qual '+' --split-files -O $dumpdir --gzip $F{srarun_acc} ",
             "mv $dumpdir/$F{srarun_acc}_1.fastq.gz $make_target",
           ],
@@ -151,6 +152,8 @@ sub tsvToMakeHash{
             $dumpdir
           ],
         };
+        push(@{ $$make{"all"}{DEP} }, $filename1, $filename2);
+
         if($$settings{shuffled}){
           my $filename3="$dumpdir/$F{strain}.shuffled.fastq.gz";
           $$make{$filename3}={
