@@ -144,7 +144,7 @@ sub tsvToMakeHash{
         };
         $$make{$filename1}={
           CMD=>[
-            "\@echo Downloading $make_target ($F{srarun_acc})",
+            "\@echo \"Downloading $make_target ($F{srarun_acc})\"",
             "fastq-dump --defline-seq '$seqIdTemplate' --defline-qual '+' --split-files -O $dumpdir --gzip $F{srarun_acc} ",
             "mv $dumpdir/$F{srarun_acc}_1.fastq.gz $make_target",
           ],
@@ -313,7 +313,10 @@ sub runMakefile{
   my $command="nice make all --directory=$dir --jobs=$$settings{numcpus}";
   if($$settings{run}){
     system("$command 2>&1");
-    die if $?;
+    if($?){
+      logmsg "ERROR: `make` failed.  Please address all errors and then run the make command again:\n  $command";
+      die;
+    }
   } else {
     logmsg "User has specified --norun; to finish running this script, use a make command like so:
       $command";
