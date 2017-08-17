@@ -4,6 +4,7 @@ pmid	25789745
 tree	http://api.opentreeoflife.org/v2/study/ot_301/tree/tree2.tre								
 source									
 dataType	empirical								
+intendedUse	Epi-validated outbreak								
 									
 biosample_acc	strain	genBankAssembly	SRArun_acc	outbreak	dataSetName	suggestedReference	sha256sumAssembly	sha256sumRead1	sha256sumRead2
 SAMN01939119	CFSAN002349	GCA_001257675.1	SRR1206159	outgroup	1408MLGX6-3WGS	FALSE	420b79856da47fb8e2c63c521b8262555cfe02ae39a7a6c1dd7204c085d1900c	c43c41991ad8ed40ffcebbde36dc9011f471dea643fc8f715621a2e336095bf5	4d12ed7e34b2456b8444dd71287cbb83b9c45bd18dc23627af0fbb6014ac0fca
