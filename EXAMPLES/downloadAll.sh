@@ -44,9 +44,6 @@ which raxmlHPC
 msg "Downloading datasets"
 for tsv in $THISDIR/../datasets/*.tsv; do
   name=$(basename $tsv .tsv)
-  if [ "$name" != "Listeria_monocytogenes_1408MLGX6-3WGS" ]; then
-    continue;
-  fi
 
   msg "Downloading $name"
   GenFSGopher.pl --outdir $THISDIR/$name --layout cfsan --numcpus $NUMCPUS $tsv 
@@ -63,10 +60,21 @@ for tsv in $THISDIR/../datasets/*.tsv; do
     raxmlHPC -f a -s snpma.fasta -x $RANDOM -p $RANDOM -N 100 -m GTRGAMMA -n snp-pipeline
   cd -
   NEWTREE=$THISDIR/$name/snp-pipeline/RAxML_bipartitions.snp-pipeline
-  #REFTREE=$
+  REFTREE=$THISDIR/$name/tree.dnd
 
   # Compare vs original tree
-  cat  $NEWTREE 
+
+  # Fix any isolate that has quotes or spaces
+  cat $REFTREE $NEWTREE | perl -lane "s/ /_/g; s/'//g; print;" > $THISDIR/$name/allTrees.dnd
+  # Compare with RAxML
+  cd $THISDIR/$name
+    raxmlHPC -m GTRCAT -z allTrees.dnd -f r -n TEST
+    cat RAxML_RF-Distances.TEST
+    # Robinson-Foulds metric is the third number in this file
+    RF=$(cut -f 3 -d ' ' RAxML_RF-Distances.TEST)
+  cd -
+
+  msg "Robinson-Foulds metric is $RF between your tree and the reference tree"
 
 done
 
