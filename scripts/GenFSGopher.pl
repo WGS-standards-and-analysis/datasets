@@ -3,7 +3,7 @@
 # Downloads a test set directory
 # 
 # Author: Lee Katz <gzu2@cdc.gov>
-# WGS standards and analysis group
+# WGS standards and analysis group of the Gen-FS collaboration
 
 use strict;
 use warnings;
@@ -13,7 +13,7 @@ use File::Basename qw/fileparse dirname basename/;
 use File::Temp qw/tempdir tempfile/;
 use File::Spec;
 
-use ExtUtils::MakeMaker;
+my $VERSION=0.4;
 
 my $scriptInvocation="$0 ".join(" ",@ARGV);
 my $scriptsDir=dirname(File::Spec->rel2abs($0));
@@ -24,13 +24,26 @@ exit main();
 
 sub main{
   my $settings={run=>1};
-  GetOptions($settings,qw(help outdir=s format=s shuffled! layout=s numcpus=i run!));
+  GetOptions($settings,qw(help outdir=s format=s shuffled! layout=s numcpus=i run! version citation));
   die usage() if($$settings{help});
   $$settings{format}||="tsv"; # by default, input format is tsv
   $$settings{seqIdTemplate}||='@$ac_$sn[_$rn]/$ri';
   $$settings{layout}||="onedir";
   $$settings{layout}=lc($$settings{layout});
   $$settings{numcpus}||=1;
+
+  if($$settings{version}){
+    print "$0 $VERSION\n";
+    return 0;
+  }
+  if($$settings{citation}){
+    print "Please reference the WGS Standards and Analysis working group, part of the Gen-FS collaboration
+    https://github.com/WGS-standards-and-analysis/datasets
+    https://peerj.com/preprints/3107/
+
+    For individual datasets, please contact the source listed the dataset spreadsheet.\n";
+    return 0;
+  }
 
   # Get the output directory and spreadsheet, and make sure they exist
   $$settings{outdir}||=die "ERROR: need outdir parameter\n".usage();
@@ -327,8 +340,6 @@ sub runMakefile{
 
 sub usage{
   "  $0: Reads a standard dataset spreadsheet and downloads its data
-  Brought to you by the WGS Standards and Analysis working group
-  https://github.com/WGS-standards-and-analysis/datasets
 
   Usage: $0 -o outdir spreadsheet.dataset.tsv
   PARAM        DEFAULT  DESCRIPTION
@@ -344,6 +355,9 @@ sub usage{
                         forward and reverse files.
   --norun      <NONE>   Do not run anything; just create a Makefile.
   --numcpus    1        How many jobs to run at once. Be careful of disk I/O.
+  --citation            Print the recommended citation for this script and exit
+  --version             Print the version and exit
+  --help                Print the usage statement and die
   "
 }
 
