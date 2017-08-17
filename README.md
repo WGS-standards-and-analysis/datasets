@@ -3,7 +3,9 @@ Benchmark datasets for WGS analysis.
 
 ## Installation
 
-Grab the latest stable release under the releases tab.  If you are feeling adventurous, use `git clone`!
+Grab the latest stable release under the releases tab.  If you are feeling adventurous, use `git clone`!  Include the scripts directory in your path.  For example, if you downloaded this project into your local bin directory:
+
+    $ export PATH=$PATH:$HOME/bin/datasets/scripts
 
 ## For the impatient
 
