@@ -58,7 +58,7 @@ for tsv in $THISDIR/../datasets/*.tsv; do
   # MaxConcurrentCollectSampleMetrics=                       # set equal to 1
   # Bowtie2Align_ExtraParams="--reorder -X 1000"             # pass -p 1 to it
   # SmaltAlign_ExtraParams="-O -i 1000 -r 1"                 # pass -n 1 to it
-  sed -i '/MaxConcurrentCallConsensus/d' $SNP_CONF
+  sed -i '/MaxConcurrentPrepSamples/d' $SNP_CONF
   sed -i '/MaxConcurrentCallConsensus/d' $SNP_CONF
   sed -i '/MaxConcurrentCollectSampleMetrics/d' $SNP_CONF
   sed -i '/Bowtie2Align_ExtraParams/d' $SNP_CONF
