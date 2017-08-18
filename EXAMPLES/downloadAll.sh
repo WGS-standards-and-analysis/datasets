@@ -35,10 +35,10 @@ which raxmlHPC || ( \
   wget 'https://github.com/stamatak/standard-RAxML/archive/v8.1.16.tar.gz' -O $THISDIR/raxml_v8.1.16.tar.gz && \
   cd $THISDIR && tar zxvf raxml_v8.1.16.tar.gz && \
   make -j $NUMCPUS -C standard-RAxML-8.1.16 -f Makefile.gcc && \
-  export PATH=$PATH:$THISDIR/standard-RAxML-8.1.16 && \
   cd - && \
   rm -vf $THISDIR/raxml_v8.1.16.tar.gz
-) || \
+) && \
+export PATH=$PATH:$THISDIR/standard-RAxML-8.1.16 && \
 which raxmlHPC
 
 msg "Downloading datasets"
@@ -51,6 +51,25 @@ for tsv in $THISDIR/../datasets/*.tsv; do
   msg "SNP-Pipeline"
   SNP_CONF="$THISDIR/$name/snppipeline.conf"
   copy_snppipeline_data.py configurationFile $THISDIR/$name
+
+  # Enable serial multithreading for SNP-Pipeline
+  # MaxConcurrentPrepSamples=                                # set equal to 1
+  # MaxConcurrentCallConsensus=                              # set equal to 1
+  # MaxConcurrentCollectSampleMetrics=                       # set equal to 1
+  # Bowtie2Align_ExtraParams="--reorder -X 1000"             # pass -p 1 to it
+  # SmaltAlign_ExtraParams="-O -i 1000 -r 1"                 # pass -n 1 to it
+  sed -i '/MaxConcurrentCallConsensus/d' $SNP_CONF
+  sed -i '/MaxConcurrentCallConsensus/d' $SNP_CONF
+  sed -i '/MaxConcurrentCollectSampleMetrics/d' $SNP_CONF
+  sed -i '/Bowtie2Align_ExtraParams/d' $SNP_CONF
+  sed -i '/SmaltAlign_ExtraParams/d' $SNP_CONF
+  echo "" >> $SNP_CONF                                       # ensure a newline
+  echo "MaxConcurrentPrepSamples=1" >> $SNP_CONF             # Serial processing (one concurrent sample at a time)
+  echo "MaxConcurrentCallConsensus=1" >> $SNP_CONF           # Serial processing
+  echo "MaxConcurrentCollectSampleMetrics=1" >> $SNP_CONF    # Serial processing
+  echo "Bowtie2Align_ExtraParams=\"--reorder -X 1000 -p $NUMCPUS\"" >> $SNP_CONF # multithreading
+  echo "SmaltAlign_ExtraParams=\"-O -i 1000 -r 1 -n $NUMCPUS\"" >> $SNP_CONF     # multithreading
+
 
   REF=$(ls $THISDIR/$name/reference/*.fasta | head -n 1)
   nice run_snp_pipeline.sh -c $SNP_CONF -s $THISDIR/$name/samples -m soft -o $THISDIR/$name/snp-pipeline $REF
