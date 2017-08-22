@@ -22,16 +22,16 @@ In addition to the installation above, please install the following.
 
   Modified instructions from https://www.ncbi.nlm.nih.gov/books/NBK179288/
 
-  mkdir -p ~/bin
-  cd ~/bin
-  perl -MNet::FTP -e \
-    '$ftp = new Net::FTP("ftp.ncbi.nlm.nih.gov", Passive => 1);
-     $ftp->login; $ftp->binary;
-     $ftp->get("/entrez/entrezdirect/edirect.tar.gz");'
-  gunzip -c edirect.tar.gz | tar xf -
-  rm edirect.tar.gz
-  export PATH=$PATH:$HOME/bin/edirect
-  ./edirect/setup.sh
+    mkdir -p ~/bin
+    cd ~/bin
+    perl -MNet::FTP -e \
+      '$ftp = new Net::FTP("ftp.ncbi.nlm.nih.gov", Passive => 1);
+       $ftp->login; $ftp->binary;
+       $ftp->get("/entrez/entrezdirect/edirect.tar.gz");'
+    gunzip -c edirect.tar.gz | tar xf -
+    rm edirect.tar.gz
+    export PATH=$PATH:$HOME/bin/edirect
+    ./edirect/setup.sh
 
 ## For the impatient
 
