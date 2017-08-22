@@ -7,6 +7,32 @@ Grab the latest stable release under the releases tab.  If you are feeling adven
 
     $ export PATH=$PATH:$HOME/bin/datasets/scripts
 
+### Dependencies
+
+In addition to the installation above, please install the following.
+
+1. edirect (see section on edirect below)
+2. sra-toolkit, built from source: https://github.com/ncbi/sra-tools/wiki/Building-and-Installing-from-Source
+3. Perl 5.12.0
+4. Make
+5. sha256sum - Brew users: `brew install sha2`
+6. wget - Brew users: `brew install wget`
+
+### Installing edirect
+
+  Modified instructions from https://www.ncbi.nlm.nih.gov/books/NBK179288/
+
+  mkdir -p ~/bin
+  cd ~/bin
+  perl -MNet::FTP -e \
+    '$ftp = new Net::FTP("ftp.ncbi.nlm.nih.gov", Passive => 1);
+     $ftp->login; $ftp->binary;
+     $ftp->get("/entrez/entrezdirect/edirect.tar.gz");'
+  gunzip -c edirect.tar.gz | tar xf -
+  rm edirect.tar.gz
+  export PATH=$PATH:$HOME/bin/edirect
+  ./edirect/setup.sh
+
 ## For the impatient
 
 We have included a script that downloads all datasets, runs the CFSAN SNP Pipeline, infers a phylogeny, and compares the tree against the suggested tree.  All example commands are present in the shell script for your manual inspection.
@@ -30,18 +56,13 @@ To run, you need a dataset in tsv format.  Here is the usage statement:
                           forward and reverse files.
     --norun      <NONE>   Do not run anything; just create a Makefile.
     --numcpus    1        How many jobs to run at once. Be careful of disk I/O.
+    --citation            Print the recommended citation for this script and exit
     --version             Print the version and exit
     --help                Print the usage statement and die
 
 ## Using a dataset
 
 There is a field `intendedUse` which suggests how a particular dataset might be used.  For example, Epi-validated outbreak datasets might be used with a SNP-based or MLST-based workflow.  As the number of different values for `intendedUse` increases, other use-cases will be available.  Otherwise, how you use a dataset is up to you!
-
-## Dependencies
-1. edirect
-2. sra-toolkit, built from source: https://github.com/ncbi/sra-tools/wiki/Building-and-Installing-from-Source
-3. Perl 5.12.0
-4. Make
 
 ## Creating your own dataset
 To create your own dataset and to make it compatible with the existing script(s) here, please follow these instructions.  These instructions are subject to change.
