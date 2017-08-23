@@ -1,7 +1,7 @@
 Organism	Campylobacter jejuni									
 Outbreak	0810PADBR-1									
 pmid										
-tree	-									
+tree	https://api.opentreeoflife.org/v2/study/ot_301/tree/tree8.tre									
 source	Collette Fitzgerald									
 dataType	empirical									
 intendedUse	Epi-validated outbreak									
