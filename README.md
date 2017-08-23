@@ -15,8 +15,8 @@ In addition to the installation above, please install the following.
 2. sra-toolkit, built from source: https://github.com/ncbi/sra-tools/wiki/Building-and-Installing-from-Source
 3. Perl 5.12.0
 4. Make
-5. sha256sum - Brew users: `brew install sha2`
-6. wget - Brew users: `brew install wget`
+5. wget - Brew users: `brew install wget`
+6. sha256sum - Linux-based OSs should have this already; Other users should see the relevant installation section below.
 
 ### Installing edirect
 
@@ -32,6 +32,15 @@ In addition to the installation above, please install the following.
     rm edirect.tar.gz
     export PATH=$PATH:$HOME/bin/edirect
     ./edirect/setup.sh
+
+### Installing sha256sum
+
+If you do not have sha256sum (e.g., if you are on MacOS), then try to make the shell function and export it.
+
+    function sha256sum() { shasum -a 256 "$@" ; }
+    export -f sha256sum
+
+This shell function will need to be defined in the current session. To make it permanent for future sessions, add it to `$HOME/.bashrc`.
 
 ## For the impatient
 
