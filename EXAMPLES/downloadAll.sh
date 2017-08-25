@@ -55,6 +55,7 @@ for tsv in $THISDIR/../datasets/*.tsv; do
 
   # Infer a phylogeny following SNP-Pipeline
   cd $THISDIR/$name/snp-pipeline
+    rm -vf RAxML*.snp-pipeline # rm any previous results
     raxmlHPC -f a -s snpma.fasta -x $RANDOM -p $RANDOM -N 100 -m GTRGAMMA -n snp-pipeline
   cd -
   NEWTREE=$THISDIR/$name/snp-pipeline/RAxML_bipartitions.snp-pipeline
@@ -66,6 +67,7 @@ for tsv in $THISDIR/../datasets/*.tsv; do
   cat $REFTREE $NEWTREE | perl -lane "s/ /_/g; s/'//g; print;" > $THISDIR/$name/allTrees.dnd
   # Compare with RAxML
   cd $THISDIR/$name
+    rm -vf RAxML*.TEST # rm any previous results
     raxmlHPC -m GTRCAT -z allTrees.dnd -f r -n TEST
     cat RAxML_RF-Distances.TEST
     # Robinson-Foulds metric is the third number in this file
