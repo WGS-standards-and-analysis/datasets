@@ -1,4 +1,4 @@
-#! /usr/bin/env sed -f
+#!/bin/sh
 
 #
 # gbk2fas.sed -- Sed script to convert Genbank to Fasta format. Tested
@@ -13,6 +13,8 @@
 # If you happen to use this script in a publication, please cite the web
 # page at http://www.goeker.org/scripts/
 #
+
+exec sed -f - -- "$@" <<'EOF'
 
 /^ *ACCESSION/ {
   s/^ *ACCESSION \+//
@@ -35,3 +37,5 @@
 }
 
 d
+
+EOF
