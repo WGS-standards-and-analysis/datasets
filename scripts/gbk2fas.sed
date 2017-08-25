@@ -1,4 +1,4 @@
-#! /usr/bin/env sed -f
+#! /usr/bin/env sed
 
 #
 # gbk2fas.sed -- Sed script to convert Genbank to Fasta format. Tested
