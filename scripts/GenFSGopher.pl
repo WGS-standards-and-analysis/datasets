@@ -228,8 +228,9 @@ sub tsvToMakeHash{
 
         $$make{$filename2}={
           CMD=>[
-            "\@echo running gbk2fas.sed to create $make_target",
-            "gbk2fas.sed $filename1 > $make_target",
+            #"\@echo running gbk2fas.sed to create $make_target",
+            #"gbk2fas.sed $filename1 > $make_target",
+            "esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -target nuccore -name assembly_nuccore_insdc | efetch -format fasta > $make_target",
           ],
           DEP=>[
             $dumpdir, $filename1
