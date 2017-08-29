@@ -7,6 +7,8 @@ set -e
 THISDIR=$(dirname $0)
 
 export PATH="$THISDIR/../scripts:$PATH"
+# In case RAxML has to be downloaded, it will be here
+export PATH="$PATH:$THISDIR/standard-RAxML-8.1.16"
 
 # Print a message to stderr with the script name
 function msg(){
@@ -38,7 +40,6 @@ which raxmlHPC || ( \
   cd - && \
   rm -vf $THISDIR/raxml_v8.1.16.tar.gz
 ) && \
-export PATH=$PATH:$THISDIR/standard-RAxML-8.1.16 && \
 which raxmlHPC
 
 msg "Downloading datasets"
