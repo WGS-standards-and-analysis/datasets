@@ -7,7 +7,7 @@ dataType	simulated
 intendedUse	benchmark dataset with known phylogeny and SNP locations: data generated using TreeToReads. 250bp, 40X coverage, 150 var sites, S.Bareilly GCA_000439415.1 anchor genome											
 												
 biosample_acc	strain	genBankAssembly	SRArun_acc	outbreak	dataSetName	suggestedReference	sha256sumAssembly	sha256sumRead1	sha256sumRead2	fileName	voucherContact	
-SAMN04335555	SIM_CFSAN000189	GCA_000439415.1	SRR3020612	outgroup	simulated Salmonella outbreak	1	c3202bf0cfe762d5f345c3f258f07a61607e04f49fc2b0cb94818d105d6ba82f	bbcd949d2cfb8b9051b1b298e244c5a6272db7518384213759ec218054dd35dd	78f517a041c216ff074f2a96844d5b809dc392899a68b64ab051e6b014cd3c8c			
+SAMN04335555	SIM_CFSAN000189	GCA_000439415.1	SRR3020612	outgroup	simulated Salmonella outbreak	1	63a6ceadd13810ac9edbd0a196a589311fc9530ea631254f7823a57d39bdc01e	bbcd949d2cfb8b9051b1b298e244c5a6272db7518384213759ec218054dd35dd	78f517a041c216ff074f2a96844d5b809dc392899a68b64ab051e6b014cd3c8c			
 SAMN04335556	SIM_CFSAN000191		SRR3020613	outgroup	simulated Salmonella outbreak	0		b9746ecb72d170bf0b28e459ffb5634c4fbb99f5dbdcab28b614b0bdf39d1d18	67df2984c6e161a004fcd2cbd589a9ab11ab458f8edf9120367387c5050a0e0a			
 SAMN04335557	SIM_CFSAN000211		SRR3020614	outgroup	simulated Salmonella outbreak	0		fa1533396b8a7c5e74fef68cbd15bd7f3c06f04c26dfddaa94deee5791c3d0fd	abe1b17edf8b56256947da5fbbdde57b3ac67d9b1ec010cbc8fb2bd15f6d844d			
 SAMN04335558	SIM_CFSAN000212		SRR3020615	outgroup	simulated Salmonella outbreak	0		6fb6d71c3dbc5de2682c293b5ad1d2ca2b59b4f5e0a8932fd744659d271f6b7e	34d7a7c68a318ce66680afbec5c9793d40aa9fbce04a73b4bc7870481319a3a1			

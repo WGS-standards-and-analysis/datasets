@@ -239,7 +239,7 @@ sub tsvToMakeHash{
         push(@{ $$make{"all"}{DEP} }, $filename2);
         $$make{$filename1}={
           CMD=>[
-            "esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -target nuccore -name assembly_nuccore_insdc | efetch -format gbwithparts > $make_target",
+            "esearch -db assembly -query '$F{genbankassembly} NOT refseq[filter]' | elink -target nuccore -name assembly_nuccore_insdc | efetch -format gb -style withparts > $make_target",
           ],
           DEP=>[
             $dumpdir,
